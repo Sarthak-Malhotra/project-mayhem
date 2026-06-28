@@ -2,13 +2,18 @@
 import '../styles.css';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { useAudio } from '@/components/AudioProvider';
 import { useGameEngine } from '../hooks/useGameEngine';
-import { FirstPersonView } from './FirstPersonView';
 import { Minimap } from './Minimap';
 import { QuestionModal } from './QuestionModal';
 import { StoryModal } from './StoryModal';
 import { ArrowUp, ArrowDown, CornerUpLeft, CornerUpRight, Map } from 'lucide-react';
+
+const FirstPersonView = dynamic(
+  () => import('./FirstPersonView').then(mod => mod.FirstPersonView),
+  { ssr: false }
+);
 
 export default function GameContainer() {
   const { changeBGM } = useAudio();
