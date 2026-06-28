@@ -1,0 +1,77 @@
+import { createHash, timingSafeEqual } from 'node:crypto'
+import { NextRequest, NextResponse } from 'next/server'
+import { getSession, saveDemoState } from '@/app/hunt/case-07/lib/session'
+import { isDbAvailable, db } from '@/db'
+import { puzzleEvents } from '@/db/schema'
+import { timelines } from '@/app/hunt/case-07/lib/timelines'
+
+const allowedPuzzles = new Set([
+  'quarantine-registration',
+  'behavioral-match',
+  'black-symbol',
+  'identity-distortion',
+  'memory-corruption',
+  'final-transmission',
+])
+
+function digest(value: string) {
+  return createHash('sha256').update(value.trim().toUpperCase()).digest()
+}
+
+export async function POST(request: NextRequest) {
+  try {
+    const session = await getSession()
+    if (!session) {
+      return NextResponse.json({ correct: false, message: 'Unauthenticated.' }, { status: 401 })
+    }
+
+    const body: unknown = await request.json().catch(() => null)
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ correct: false, message: 'Invalid request.' }, { status: 400 })
+    }
+
+    const { timelineId, puzzleId, answer } = body as Record<string, unknown>
+    const validTimelineIds = new Set(timelines.map(t => t.id))
+    if (typeof timelineId !== 'string' || !validTimelineIds.has(timelineId) || typeof puzzleId !== 'string' || !allowedPuzzles.has(puzzleId) || typeof answer !== 'string') {
+      return NextResponse.json({ correct: false, message: 'Invalid puzzle parameters.' }, { status: 400 })
+    }
+
+    // Determine expected answer: check env var (no hardcoded fallback answers as strict rule)
+    const envKey = `PUZZLE_OPERATION_DEADLIGHT_${puzzleId.replaceAll('-', '_').toUpperCase()}`
+    const expected = process.env[envKey]
+    if (!expected) {
+      console.error(`Missing expected answer in process.env for key: ${envKey}`)
+      return NextResponse.json({ correct: false, message: 'Configuration error: answer key not configured.' }, { status: 500 })
+    }
+
+    const correct = timingSafeEqual(digest(answer), digest(expected))
+    const outcome = correct ? ('correct' as const) : ('wrong' as const)
+
+    // Append-only audit log
+    if (isDbAvailable) {
+      try {
+        await db.insert(puzzleEvents).values({
+          userId: session.userId,
+          timelineId: timelineId,
+          puzzleId: puzzleId,
+          answerHash: createHash('sha256').update(answer.trim().toUpperCase()).digest('hex'),
+          outcome: outcome,
+        })
+      } catch (dbError) {
+        console.error('Failed to write puzzle event to database:', dbError)
+      }
+    } else {
+      // Demo Mode: save wrong attempts in session cookie to degrade integrity dynamically
+      if (!correct) {
+        session.wrongAttempts[timelineId] = (session.wrongAttempts[timelineId] || 0) + 1
+        session.integrity = Math.max(0, session.integrity - 10)
+      }
+      await saveDemoState(session)
+    }
+
+    return NextResponse.json({ correct })
+  } catch (error) {
+    console.error('Validation API error:', error)
+    return NextResponse.json({ correct: false, message: 'Internal server error.' }, { status: 500 })
+  }
+}
