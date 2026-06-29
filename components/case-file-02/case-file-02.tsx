@@ -3,13 +3,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 // ═══════════════════════════════════════════════
 // AUDIO ENGINE
 // ═══════════════════════════════════════════════
-let _ctx = null;
+let _ctx: any = null;
 function getCtx() {
-  if (!_ctx) _ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (!_ctx) _ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
   if (_ctx.state === "suspended") _ctx.resume();
   return _ctx;
 }
-function makeReverb(ctx, secs = 2.5) {
+function makeReverb(ctx: AudioContext, secs: number = 2.5) {
   const conv = ctx.createConvolver();
   const len = ctx.sampleRate * secs;
   const buf = ctx.createBuffer(2, len, ctx.sampleRate);
@@ -21,30 +21,37 @@ function makeReverb(ctx, secs = 2.5) {
   return conv;
 }
 class MusicEngine {
+  master: GainNode | null = null;
+  rev: ConvolverNode | null = null;
+  nodes: OscillatorNode[] = [];
+  loopId: any = null;
+  theme: string | null = null;
+  vol: number = 0.8;
+
   constructor() { this.master = null; this.rev = null; this.nodes = []; this.loopId = null; this.theme = null; this.vol = 0.8; }
   setup() {
     const ctx = getCtx();
     if (this.master) return;
-    this.master = ctx.createGain(); this.master.gain.value = 0;
+    this.master = ctx.createGain(); this.master!.gain.value = 0;
     this.rev = makeReverb(ctx);
-    this.rev.connect(this.master);
-    this.master.connect(ctx.destination);
+    this.rev!.connect(this.master!);
+    this.master!.connect(ctx.destination);
   }
-  _n(freq, type, vol, atk, dur, start) {
+  _n(freq: number, type: OscillatorType, vol: number, atk: number, dur: number, start: number) {
     const ctx = getCtx();
     const g = ctx.createGain(); g.gain.setValueAtTime(0.001, start); g.gain.linearRampToValueAtTime(vol, start + atk); g.gain.exponentialRampToValueAtTime(0.001, start + dur);
     const o = ctx.createOscillator(); o.type = type; o.frequency.value = freq;
     const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = Math.min(freq * 4, 3000);
-    o.connect(f); f.connect(g); g.connect(this.rev);
+    o.connect(f); f.connect(g); g.connect(this.rev!);
     o.start(start); o.stop(start + dur + 0.1);
     this.nodes.push(o);
   }
-  play(theme) {
+  play(theme: string) {
     this.setup(); this.stopAll(); this.theme = theme;
     const ctx = getCtx(), t = ctx.currentTime;
-    this.master.gain.cancelScheduledValues(t);
-    this.master.gain.setValueAtTime(0, t);
-    this.master.gain.linearRampToValueAtTime(this.vol, t + 2.5);
+    this.master!.gain.cancelScheduledValues(t);
+    this.master!.gain.setValueAtTime(0, t);
+    this.master!.gain.linearRampToValueAtTime(this.vol, t + 2.5);
     if (theme === "scene") this._scene();
     else if (theme === "puzzle") this._puzzle();
     else if (theme === "tense") this._tense();
@@ -99,7 +106,7 @@ class MusicEngine {
     MAJOR.forEach((f, i) => { this._n(f, "sawtooth", 0.09 + i * 0.008, 0.7 + i * 0.1, 5, now + i * 0.85); this._n(f * 0.5, "sine", 0.18, 1.2, 6, now + i * 0.4); this._n(f * 2, "triangle", 0.05, 0.3, 2.5, now + i * 1.1 + 0.2); });
     this._n(65, "sine", 0.35, 2, 10, now);
   }
-  fadeOut(dur = 1.5) {
+  fadeOut(dur: number = 1.5) {
     if (!this.master) return;
     const ctx = getCtx(), t = ctx.currentTime;
     this.master.gain.cancelScheduledValues(t);
@@ -114,7 +121,7 @@ class MusicEngine {
   }
 }
 
-function sfx(type) {
+function sfx(type: string) {
   try {
     const ctx = getCtx();
     const g = ctx.createGain(); g.connect(ctx.destination);
@@ -158,29 +165,29 @@ input,button{outline:none;-webkit-tap-highlight-color:transparent;font-family:in
 ::selection{background:#4a7aff33;color:#dde4f5}
 `;
 
-const rnd = (a, b) => Math.random() * (b - a) + a;
-const fmtTime = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+const rnd = (a: number, b: number) => Math.random() * (b - a) + a;
+const fmtTime = (s: number) => `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 
 // ═══════════════════════════════════════════════
 // COOLDOWN HOOK
 // ═══════════════════════════════════════════════
-function useCooldown(secs = 120) {
+function useCooldown(secs: number = 120) {
   const [cd, setCd] = useState(0);
-  const ref = useRef(null);
+  const ref = useRef<NodeJS.Timeout | null>(null);
   const trigger = useCallback(() => {
     sfx("cooldown");
     setCd(secs);
-    clearInterval(ref.current);
-    ref.current = setInterval(() => setCd(v => { if (v <= 1) { clearInterval(ref.current); return 0; } return v - 1; }), 1000);
+    clearInterval(ref.current!);
+    ref.current = setInterval(() => setCd(v => { if (v <= 1) { clearInterval(ref.current!); return 0; } return v - 1; }), 1000);
   }, [secs]);
-  useEffect(() => () => clearInterval(ref.current), []);
+  useEffect(() => () => clearInterval(ref.current!), []);
   return { cd, active: cd > 0, trigger };
 }
 
 // ═══════════════════════════════════════════════
 // PARTICLES / FX
 // ═══════════════════════════════════════════════
-function Particles({ count = 16, color = "#4a7aff" }) {
+function Particles({ count = 16, color = "#4a7aff" }: { count?: number, color?: string }) {
   const pts = useRef(Array.from({ length: count }, () => ({ x: rnd(0, 100), delay: rnd(0, 16), dur: rnd(12, 26), sz: rnd(0.8, 2.2) }))).current;
   return (
     <div style={{ position: "fixed", inset: 0, pointerEvents: "none", zIndex: 1, overflow: "hidden" }}>
@@ -203,7 +210,7 @@ function ScanLines() {
 // ═══════════════════════════════════════════════
 // COOLDOWN OVERLAY
 // ═══════════════════════════════════════════════
-function CooldownOverlay({ cd }) {
+function CooldownOverlay({ cd }: { cd: number }) {
   if (cd <= 0) return null;
   return (
     <div style={{ position: "fixed", top: 50, left: 0, right: 0, zIndex: 200, display: "flex", justifyContent: "center", pointerEvents: "none" }}>
@@ -218,7 +225,7 @@ function CooldownOverlay({ cd }) {
 // ═══════════════════════════════════════════════
 // PORTRAITS
 // ═══════════════════════════════════════════════
-const CHARS = {
+const CHARS: any = {
   aurelis: { hair: "#10102a", coat: "#0d1b40", skin: "#c8a882", eye: "#4a7aff", glow: "#4a7aff", title: "AURELIS" },
   voss:    { hair: "#2a1812", coat: "#180a0a", skin: "#d4a882", eye: "#cc3344", glow: "#cc3344", title: "DR. VOSS" },
   ashford: { hair: "#2a2a2a", coat: "#080814", skin: "#b89878", eye: "#d4aa50", glow: "#d4aa50", title: "DIRECTOR" },
@@ -228,7 +235,7 @@ const CHARS = {
   echo:    { hair: "#0a0a0a", coat: "#0a0a16", skin: "#a09070", eye: "#cc3344", glow: "#cc3344", title: "ECHO" },
   you:     { hair: "#1a1a1a", coat: "#0a0a0a", skin: "#c0a080", eye: "#7a9fff", glow: "#7a9fff", title: "YOU" },
 };
-function Portrait({ char, size = 90, active = true, speaking = false }) {
+function Portrait({ char, size = 90, active = true, speaking = false }: { char: string, size?: number, active?: boolean, speaking?: boolean }) {
   const c = CHARS[char] || CHARS.you;
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 5, opacity: active ? 1 : 0.2, transition: "opacity .5s", transform: speaking ? "scale(1.06)" : "scale(1)", transformOrigin: "bottom center", transitionProperty: "opacity,transform" }}>
@@ -260,7 +267,7 @@ function Portrait({ char, size = 90, active = true, speaking = false }) {
 // ═══════════════════════════════════════════════
 // SCENE BG
 // ═══════════════════════════════════════════════
-const BKGS = {
+const BKGS: any = {
   gate:     { grad: "radial-gradient(ellipse at 40% 70%,#0c1228,#060710 55%,#04050c)", rain: true },
   study:    { grad: "radial-gradient(ellipse at 35% 45%,#110d06,#07080f 60%)", rain: false },
   forest:   { grad: "radial-gradient(ellipse at 50% 65%,#051005,#060a06 40%,#07080f)", rain: true },
@@ -271,17 +278,19 @@ const BKGS = {
   echo_lab: { grad: "radial-gradient(ellipse at 50% 50%,#0a0608,#07080f 55%)", rain: false },
   terminus: { grad: "radial-gradient(ellipse at 50% 50%,#0a0608,#04030a 70%)", rain: false },
 };
-const LABELS = {
+const LABELS: any = {
   gate: "PRAGUE · EASTERN GATE · 1789", study: "WREN'S STUDY · 1789", forest: "BOHEMIAN FOREST · 1790",
   office: "PROJECT NULL · 1978", vault: "RESTRICTED VAULT · SUBLEVEL 3 · 1978",
   briefing: "BRIEFING ROOM · PRESENT DAY", rooftop: "DIRECTOR'S OFFICE · 1978",
   echo_lab: "ECHO FACILITY · 1983", terminus: "TIMELINE ZERO",
 };
-const SCENE_THEME = {
+
+const SCENE_THEME: Record<string, string> = {
   gate: "scene", study: "scene", forest: "tense", office: "tense",
   vault: "tense", briefing: "scene", rooftop: "tense", echo_lab: "tense", terminus: "finale",
 };
-function SceneBG({ scene }) {
+
+function SceneBG({ scene }: { scene: string }) {
   const bg = BKGS[scene] || { grad: "#07080f", rain: false };
   return (
     <>
@@ -295,33 +304,33 @@ function SceneBG({ scene }) {
 }
 
 // ═══════════════════════════════════════════════
-// TYPEWRITER — no skip
+// TYPEWRITER
 // ═══════════════════════════════════════════════
-function useTypewriter(text, spd = 22) {
+function useTypewriter(text: string, spd: number = 22) {
   const [out, setOut] = useState("");
   const [done, setDone] = useState(false);
-  const ref = useRef(null);
+  const ref = useRef<NodeJS.Timeout | null>(null);
   useEffect(() => {
     setOut(""); setDone(false); let i = 0;
-    ref.current = setInterval(() => { i++; setOut(text.slice(0, i)); if (i >= text.length) { clearInterval(ref.current); setDone(true); } }, spd);
-    return () => clearInterval(ref.current);
+    ref.current = setInterval(() => { i++; setOut(text.slice(0, i)); if (i >= text.length) { clearInterval(ref.current!); setDone(true); } }, spd);
+    return () => clearInterval(ref.current!);
   }, [text, spd]);
   return { out, done };
 }
 
 // ═══════════════════════════════════════════════
-// DIALOGUE BOX — no skip, auto-advance after delay
+// DIALOGUE BOX
 // ═══════════════════════════════════════════════
-const MOOD_COL = {
+const MOOD_COL: any = {
   narrate: "#7a8aaa", calm: "#dde4f5", urgent: "#d4aa50", shock: "#e05060",
   grave: "#b0bcd4", low: "#6a7a9a", whisper: "#4a5a7a", flat: "#8a9ab8",
   fierce: "#d4aa50", cold: "#6a7a9a", desperate: "#e05060", final: "#c0cce0",
   tired: "#5a6a8a", quiet: "#7a9fff", warning: "#e05060", revelation: "#fff",
   conspire: "#d4aa50", ominous: "#7a5a9a",
 };
-const SPK_NAMES = { aurelis: "AURELIS", voss: "DR. ELARA VOSS", maren: "PROF. IVAN MAREN", ashford: "DIRECTOR ASHFORD", wren: "ALDOUS WREN", cole: "DEPUTY COLE", echo: "ECHO", you: "YOU" };
+const SPK_NAMES: any = { aurelis: "AURELIS", voss: "DR. ELARA VOSS", maren: "PROF. IVAN MAREN", ashford: "DIRECTOR ASHFORD", wren: "ALDOUS WREN", cole: "DEPUTY COLE", echo: "ECHO", you: "YOU" };
 
-function DialogueBox({ line, idx, total, onNext }) {
+function DialogueBox({ line, idx, total, onNext }: { line: any, idx: number, total: number, onNext: () => void }) {
   const { out, done } = useTypewriter(line.text, 28);
   const color = MOOD_COL[line.mood] || "#dde4f5";
   const isNar = line.mood === "narrate";
@@ -335,7 +344,6 @@ function DialogueBox({ line, idx, total, onNext }) {
   useEffect(() => {
     if (done) {
       const words = line.text.trim().split(/\s+/).length;
-      // 150 WPM reading speed + 800ms buffer, clamped 2s–6s
       const readMs = Math.min(Math.max((words / 150) * 60000 + 800, 2000), 6000);
       const t = setTimeout(() => { setReadyToNext(true); }, readMs);
       return () => clearTimeout(t);
@@ -372,14 +380,14 @@ function DialogueBox({ line, idx, total, onNext }) {
 // ═══════════════════════════════════════════════
 // SCENE PLAYER
 // ═══════════════════════════════════════════════
-function ScenePlayer({ entry, sceneNum, totalScenes, onComplete }) {
+function ScenePlayer({ entry, sceneNum, totalScenes, onComplete }: { entry: any, sceneNum: number, totalScenes: number, onComplete: () => void }) {
   const [lineIdx, setLineIdx] = useState(0);
   const [charReady, setCharReady] = useState(false);
   const line = entry.lines[lineIdx];
   useEffect(() => { const t = setTimeout(() => setCharReady(true), 500); return () => clearTimeout(t); }, []);
   const next = () => { if (lineIdx === entry.lines.length - 1) { onComplete(); } else setLineIdx(i => i + 1); };
-  const left = entry.chars.filter(c => c.side === "left");
-  const right = entry.chars.filter(c => c.side === "right");
+  const left = entry.chars.filter((c: any) => c.side === "left");
+  const right = entry.chars.filter((c: any) => c.side === "right");
   return (
     <div style={{ minHeight: "100vh", position: "relative", overflow: "hidden" }}>
       <SceneBG scene={entry.bg} />
@@ -390,8 +398,8 @@ function ScenePlayer({ entry, sceneNum, totalScenes, onComplete }) {
       </div>
       <div style={{ position: "fixed", top: 16, right: 20, zIndex: 10, fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: "#1e2848" }}>{sceneNum}/{totalScenes}</div>
       <div style={{ position: "fixed", bottom: 185, left: 0, right: 0, zIndex: 8, display: "flex", justifyContent: "space-between", padding: "0 6vw", pointerEvents: "none", opacity: charReady ? 1 : 0, transition: "opacity .8s" }}>
-        <div style={{ display: "flex", gap: 14 }}>{left.map(c => <Portrait key={c.id} char={c.id} size={92} active={line.speaker === c.id || !line.speaker} speaking={line.speaker === c.id} />)}</div>
-        <div style={{ display: "flex", gap: 14 }}>{right.map(c => <Portrait key={c.id} char={c.id} size={92} active={line.speaker === c.id || !line.speaker} speaking={line.speaker === c.id} />)}</div>
+        <div style={{ display: "flex", gap: 14 }}>{left.map((c: any) => <Portrait key={c.id} char={c.id} size={92} active={line.speaker === c.id || !line.speaker} speaking={line.speaker === c.id} />)}</div>
+        <div style={{ display: "flex", gap: 14 }}>{right.map((c: any) => <Portrait key={c.id} char={c.id} size={92} active={line.speaker === c.id || !line.speaker} speaking={line.speaker === c.id} />)}</div>
       </div>
       <DialogueBox key={`${entry.title}-${lineIdx}`} line={line} idx={lineIdx} total={entry.lines.length} onNext={next} />
     </div>
@@ -401,19 +409,40 @@ function ScenePlayer({ entry, sceneNum, totalScenes, onComplete }) {
 // ═══════════════════════════════════════════════
 // UI COMPONENTS
 // ═══════════════════════════════════════════════
-function Card({ children, style = {}, glow }) {
+interface CardProps {
+  children: React.ReactNode;
+  style?: React.CSSProperties;
+  glow?: string;
+}
+function Card({ children, style = {}, glow }: CardProps) {
   return <div style={{ background: "#09091a", border: `1px solid ${glow ? glow + "44" : "#14182e"}`, borderRadius: 2, padding: "20px 24px", boxShadow: glow ? `0 0 28px ${glow}14,0 4px 28px rgba(0,0,0,.55)` : "0 4px 28px rgba(0,0,0,.5)", animation: "fadeUp .45s ease-out", ...style }}>{children}</div>;
 }
-function Btn({ children, onClick, disabled, color = "#4a7aff", style = {} }) {
+
+interface BtnProps {
+  children: React.ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+  color?: string;
+  style?: React.CSSProperties;
+}
+function Btn({ children, onClick, disabled = false, color = "#4a7aff", style = {} }: BtnProps) {
   const [h, setH] = useState(false);
   return <button onClick={() => { if (!disabled && onClick) onClick(); }} disabled={disabled} onMouseEnter={() => setH(true)} onMouseLeave={() => setH(false)} style={{ background: h && !disabled ? `${color}14` : "transparent", border: `1px solid ${disabled ? "#1e2848" : h ? color : color + "66"}`, color: disabled ? "#1e2848" : color, padding: "11px 26px", fontFamily: "'Cinzel',serif", fontSize: 12, letterSpacing: 3, cursor: disabled ? "default" : "pointer", transition: "all .18s", boxShadow: h && !disabled ? `0 0 24px ${color}28` : "none", ...style }}>{children}</button>;
 }
-function Label({ children }) { return <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, letterSpacing: 5, color: "#1e2848", marginBottom: 10 }}>{children}</div>; }
-function ErrMsg({ msg }) { if (!msg) return null; return <div style={{ marginTop: 10, fontFamily: "'Crimson Text',serif", fontSize: 15, color: "#e05060", fontStyle: "italic", animation: "shake .4s ease-out" }}>⚠ {msg}</div>; }
-function HintBox({ text }) {
+
+function Label({ children }: { children: React.ReactNode }) { return <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, letterSpacing: 5, color: "#1e2848", marginBottom: 10 }}>{children}</div>; }
+function ErrMsg({ msg }: { msg: string }) { if (!msg) return null; return <div style={{ marginTop: 10, fontFamily: "'Crimson Text',serif", fontSize: 15, color: "#e05060", fontStyle: "italic", animation: "shake .4s ease-out" }}>⚠ {msg}</div>; }
+function HintBox({ text }: { text: string }) {
   return <div style={{ padding: "12px 16px", background: "#050610", borderLeft: "3px solid #1e2f6a", marginTop: 12, animation: "fadeIn .4s" }}><div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: "#1e2848", letterSpacing: 3, marginBottom: 5 }}>// FIELD NOTES</div><div style={{ fontFamily: "'Crimson Text',serif", fontSize: 14, color: "#5a6a8a", fontStyle: "italic", lineHeight: 1.9 }}>{text}</div></div>;
 }
-function SolvedCard({ word, fragLabel, fragColor = "#4a7aff", onReturn }) {
+
+interface SolvedCardProps {
+  word: string;
+  fragLabel: string;
+  fragColor?: string;
+  onReturn?: () => void;
+}
+function SolvedCard({ word, fragLabel, fragColor = "#4a7aff", onReturn }: SolvedCardProps) {
   useEffect(() => { sfx("solve"); }, []);
   return (
     <Card glow={fragColor} style={{ textAlign: "center", padding: 38, animation: "fadeUp .7s ease-out" }}>
@@ -425,11 +454,18 @@ function SolvedCard({ word, fragLabel, fragColor = "#4a7aff", onReturn }) {
         <span style={{ color: fragColor, fontSize: 16 }}>◈</span>
         <span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 11, color: "#b0bcd4", letterSpacing: 2 }}>{fragLabel}</span>
       </div>
-      <div><Btn onClick={onReturn} color={fragColor}>CONTINUE THE INVESTIGATION ▸</Btn></div>
+      <div><Btn onClick={onReturn} disabled={false} color={fragColor}>CONTINUE THE INVESTIGATION ▸</Btn></div>
     </Card>
   );
 }
-function PuzzleShell({ title, era, intro, children }) {
+
+interface PuzzleShellProps {
+  title: string;
+  era: string;
+  intro: string;
+  children: React.ReactNode;
+}
+function PuzzleShell({ title, era, intro, children }: PuzzleShellProps) {
   return (
     <div style={{ minHeight: "100vh", background: "#06070e", paddingTop: 74, paddingBottom: 50 }}>
       <div style={{ position: "fixed", inset: 0, background: "radial-gradient(ellipse at 50% 18%,#090d1e,#06070e 60%)", zIndex: 0 }} />
@@ -450,7 +486,13 @@ function PuzzleShell({ title, era, intro, children }) {
     </div>
   );
 }
-function TimerBar({ elapsed, solved, total }) {
+
+interface TimerBarProps {
+  elapsed: number;
+  solved: number;
+  total: number;
+}
+function TimerBar({ elapsed, solved, total }: TimerBarProps) {
   const c = elapsed > 5400 ? "#e05060" : elapsed > 3600 ? "#d4aa50" : "#7a9fff";
   return (
     <div style={{ position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000, background: "rgba(4,5,12,.96)", borderBottom: "1px solid #14182e", padding: "7px 20px", display: "flex", alignItems: "center", gap: 16, backdropFilter: "blur(8px)" }}>
@@ -577,16 +619,16 @@ const MAP_PIECES = [
 // Shuffled tray order (deliberately not matching grid order)
 const TRAY_ORDER = [7, 12, 3, 14, 0, 9, 5, 15, 2, 10, 6, 1, 11, 4, 13, 8];
 
-function PuzzleMap({ onSolve, onPenalty }) {
-  const [grid, setGrid] = useState(() => Array.from({ length: 2 }, () => Array(8).fill(null)));
-  const [placed, setPlaced] = useState({});
-  const [dragId, setDragId] = useState(null);
+function PuzzleMap({ onSolve, onPenalty }: { onSolve: () => void, onPenalty: () => void }) {
+  const [grid, setGrid] = useState<(number | null)[][]>(() => Array.from({ length: 2 }, () => Array(8).fill(null)));
+  const [placed, setPlaced] = useState<Record<number, { col: number, row: number }>>({});
+  const [dragId, setDragId] = useState<number | null>(null);
   const [solved, setSolved] = useState(false);
   const { cd, active: cdActive, trigger: triggerCd } = useCooldown(120);
   const [attempts, setAttempts] = useState(0);
-  const byId = id => MAP_PIECES.find(p => p.id === id);
+  const byId = (id: number) => MAP_PIECES.find(p => p.id === id)!;
   const tray = TRAY_ORDER.filter(id => placed[id] === undefined);
-  const drop = (col, row) => {
+  const drop = (col: number, row: number) => {
     if (dragId === null || cdActive) return;
     const ng = grid.map(r => [...r]);
     for (let r = 0; r < 2; r++) for (let c = 0; c < 8; c++) if (ng[r][c] === dragId) ng[r][c] = null;
@@ -621,8 +663,8 @@ function PuzzleMap({ onSolve, onPenalty }) {
                         style={{ width: 70, height: 76, flexShrink: 0, border: `1px ${p ? "solid" : "dashed"} ${p ? (ok ? "#4a7aff" : "#e05060") : "#14182e"}`, background: cdActive ? "#0a0414" : p ? "#090912" : "#060710", display: "flex", alignItems: "center", justifyContent: "center", transition: "all .25s", opacity: cdActive ? 0.5 : 1 }}>
                         {p ? (
                           <div draggable={!cdActive} onDragStart={() => !cdActive && setDragId(p.id)} style={{ textAlign: "center", cursor: cdActive ? "not-allowed" : "grab", userSelect: "none", padding: "2px 4px" }}>
-                            <div style={{ fontSize: 20, color: ok ? "#7a9fff" : "#5a6a8a" }}>{p.sym}</div>
-                            <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 6, color: ok ? "#4a7aff" : "#1e2848", lineHeight: 1.2, marginTop: 2 }}>{p.label}</div>
+                             <div style={{ fontSize: 20, color: ok ? "#7a9fff" : "#5a6a8a" }}>{p.sym}</div>
+                             <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 6, color: ok ? "#4a7aff" : "#1e2848", lineHeight: 1.2, marginTop: 2 }}>{p.label}</div>
                           </div>
                         ) : <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 6, color: "#1e2848" }}>PLACE</div>}
                       </div>
@@ -655,12 +697,12 @@ function PuzzleMap({ onSolve, onPenalty }) {
 // ═══════════════════════════════════════════════
 // PUZZLE II — CIPHER
 // ═══════════════════════════════════════════════
-const CMAP = { A:"◈",B:"⬡",C:"◇",D:"✦",E:"⊕",F:"◉",G:"⊞",H:"⊗",I:"△",J:"▽",K:"◬",L:"⊿",M:"⬟",N:"⬢",O:"⊛",P:"⊜",Q:"⊝",R:"◍",S:"◎",T:"◐",U:"◑",V:"◒",W:"◓",X:"◔",Y:"◕",Z:"⊙" };
+const CMAP: Record<string, string> = { A:"◈",B:"⬡",C:"◇",D:"✦",E:"⊕",F:"◉",G:"⊞",H:"⊗",I:"△",J:"▽",K:"◬",L:"⊿",M:"⬟",N:"⬢",O:"⊛",P:"⊜",Q:"⊝",R:"◍",S:"◎",T:"◐",U:"◑",V:"◒",W:"◓",X:"◔",Y:"◕",Z:"⊙" };
 const CIPHER_WORDS = ["ANCHOR", "HOLDS"];
 const CIPHER_ANS = CIPHER_WORDS.join(" ");
 const ENCODED = CIPHER_WORDS.map(w => w.split("").map(c => CMAP[c]).join("  ")).join("    │    ");
 const CIPHER_KEY_LETTER = "H";
-function PuzzleCipher({ onSolve, onPenalty }) {
+function PuzzleCipher({ onSolve, onPenalty }: { onSolve: () => void, onPenalty: () => void }) {
   const [ans, setAns] = useState(""); const [err, setErr] = useState(""); const [solved, setSolved] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const { cd, active: cdActive, trigger: triggerCd } = useCooldown(120);
@@ -744,20 +786,20 @@ const SUDOKU_SOL = [
   [2,8,7,4,1,9,6,3,5],
   [3,4,5,2,8,6,1,7,9],
 ];
-function PuzzleSudoku({ onSolve, onPenalty }) {
+function PuzzleSudoku({ onSolve, onPenalty }: { onSolve: () => void, onPenalty: () => void }) {
   const initGrid = () => SUDOKU_PUZZLE.map(r => r.map(v => v === 0 ? "" : String(v)));
-  const [grid, setGrid] = useState(initGrid);
-  const [errors, setErrors] = useState(new Set());
+  const [grid, setGrid] = useState<string[][]>(initGrid);
+  const [errors, setErrors] = useState<Set<string>>(new Set());
   const [solved, setSolved] = useState(false);
-  const [sel, setSel] = useState(null);
+  const [sel, setSel] = useState<string | null>(null);
   const { cd, active: cdActive, trigger: triggerCd } = useCooldown(120);
   const [attempts, setAttempts] = useState(0);
 
-  const isFixed = (r, c) => SUDOKU_PUZZLE[r][c] !== 0;
+  const isFixed = (r: number, c: number) => SUDOKU_PUZZLE[r][c] !== 0;
 
   const check = () => {
     if (cdActive) return;
-    const errs = new Set();
+    const errs = new Set<string>();
     let complete = true;
     for (let r = 0; r < 9; r++) for (let c = 0; c < 9; c++) {
       const v = parseInt(grid[r][c]);
@@ -773,7 +815,7 @@ function PuzzleSudoku({ onSolve, onPenalty }) {
     }
   };
 
-  const setCell = (r, c, v) => {
+  const setCell = (r: number, c: number, v: string) => {
     if (isFixed(r, c) || cdActive) return;
     const vt = v.replace(/[^1-9]/g, "").slice(-1);
     const ng = grid.map(row => [...row]);
@@ -781,16 +823,16 @@ function PuzzleSudoku({ onSolve, onPenalty }) {
     setGrid(ng);
   };
 
-  const handleKey = (r, c, e) => {
+  const handleKey = (r: number, c: number, e: React.KeyboardEvent<any>) => {
     if (cdActive) return;
     if (e.key >= "1" && e.key <= "9") setCell(r, c, e.key);
     else if (e.key === "Backspace" || e.key === "Delete") setCell(r, c, "");
     else if (e.key === "Enter") check();
-    const dirs = { ArrowUp: [-1,0], ArrowDown: [1,0], ArrowLeft: [0,-1], ArrowRight: [0,1] };
+    const dirs: Record<string, number[]> = { ArrowUp: [-1,0], ArrowDown: [1,0], ArrowLeft: [0,-1], ArrowRight: [0,1] };
     if (dirs[e.key]) { const [dr,dc] = dirs[e.key]; const nr = Math.max(0,Math.min(8,r+dr)); const nc = Math.max(0,Math.min(8,c+dc)); setSel(`${nr},${nc}`); e.preventDefault(); }
   };
 
-  const BOX_BORDERS = (r, c) => ({
+  const BOX_BORDERS = (r: number, c: number) => ({
     borderTop: r % 3 === 0 ? "2px solid #4a7aff55" : "1px solid #14182e",
     borderLeft: c % 3 === 0 ? "2px solid #4a7aff55" : "1px solid #14182e",
     borderRight: c === 8 ? "2px solid #4a7aff55" : "1px solid #14182e",
@@ -805,7 +847,7 @@ function PuzzleSudoku({ onSolve, onPenalty }) {
       <CooldownOverlay cd={cd} />
       {solved ? <SolvedCard word="Grid locked. Frequency decoded. Signal authenticated." fragLabel="SIGNAL — FRAGMENT III" onReturn={onSolve} /> : (
         <>
-          <Card style={{ marginBottom: 16, padding: "20px", display: "inline-block" }}>
+          <Card glow="#4a7aff" style={{ marginBottom: 16, padding: "20px", display: "inline-block" }}>
             <div style={{ display: "inline-grid", gridTemplateColumns: "repeat(9,1fr)", gap: 0 }}>
               {grid.map((row, r) => row.map((val, c) => {
                 const fixed = isFixed(r, c);
@@ -835,7 +877,7 @@ function PuzzleSudoku({ onSolve, onPenalty }) {
               }))}
             </div>
           </Card>
-          <Card style={{ marginBottom: 12 }}>
+          <Card glow="#4a7aff" style={{ marginBottom: 12 }}>
             <Label>NUMBER PAD</Label>
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
               {[1,2,3,4,5,6,7,8,9].map(n => (
@@ -867,18 +909,18 @@ const CORRECT_ORDER = ["a","b","c","d","e"];
 const SCRAMBLED_ORDER = ["b","c","d","e","a"];
 const MAX_ARCHIVE_SWAPS = 5;
 
-function PuzzleArchive({ onSolve, onPenalty }) {
-  const [order, setOrder] = useState([...SCRAMBLED_ORDER]);
-  const [selIdx, setSelIdx] = useState(null);
+function PuzzleArchive({ onSolve, onPenalty }: { onSolve: () => void, onPenalty: () => void }) {
+  const [order, setOrder] = useState<string[]>([...SCRAMBLED_ORDER]);
+  const [selIdx, setSelIdx] = useState<number | null>(null);
   const [solved, setSolved] = useState(false);
   const [swapsUsed, setSwapsUsed] = useState(0);
   const { cd, active: cdActive, trigger: triggerCd } = useCooldown(180);
   const [attempts, setAttempts] = useState(0);
-  const byId = id => ARCHIVE_FRAGS.find(f => f.id === id);
+  const byId = (id: string) => ARCHIVE_FRAGS.find(f => f.id === id)!;
 
   const resetBoard = () => { setOrder([...SCRAMBLED_ORDER]); setSwapsUsed(0); setSelIdx(null); };
 
-  const handleClick = (i) => {
+  const handleClick = (i: number) => {
     if (cdActive || solved) return;
     if (selIdx === null) { setSelIdx(i); return; }
     if (selIdx === i) { setSelIdx(null); return; }
@@ -946,28 +988,28 @@ function PuzzleArchive({ onSolve, onPenalty }) {
 // PUZZLE V — LOGIC GATE RING (10 gates, pick 4)
 // ═══════════════════════════════════════════════
 const ALL_GATES = [
-  { id: 0, name: "AND",  sym: "∧", op: (a,b) => a&b },
-  { id: 1, name: "OR",   sym: "∨", op: (a,b) => a|b },
-  { id: 2, name: "XOR",  sym: "⊕", op: (a,b) => a^b },
-  { id: 3, name: "NAND", sym: "⊼", op: (a,b) => 1-(a&b) },
-  { id: 4, name: "NOR",  sym: "⊽", op: (a,b) => 1-(a|b) },
-  { id: 5, name: "XNOR", sym: "⊙", op: (a,b) => 1-(a^b) },
-  { id: 6, name: "BUF-A",sym: "▷", op: (a,_) => a },
-  { id: 7, name: "BUF-B",sym: "◁", op: (_,b) => b },
-  { id: 8, name: "NOT-A",sym: "¬A", op: (a,_) => 1-a },
-  { id: 9, name: "NOT-B",sym: "¬B", op: (_,b) => 1-b },
+  { id: 0, name: "AND",  sym: "∧", op: (a: number, b: number) => a&b },
+  { id: 1, name: "OR",   sym: "∨", op: (a: number, b: number) => a|b },
+  { id: 2, name: "XOR",  sym: "⊕", op: (a: number, b: number) => a^b },
+  { id: 3, name: "NAND", sym: "⊼", op: (a: number, b: number) => 1-(a&b) },
+  { id: 4, name: "NOR",  sym: "⊽", op: (a: number, b: number) => 1-(a|b) },
+  { id: 5, name: "XNOR", sym: "⊙", op: (a: number, b: number) => 1-(a^b) },
+  { id: 6, name: "BUF-A",sym: "▷", op: (a: number, _: number) => a },
+  { id: 7, name: "BUF-B",sym: "◁", op: (_: number, b: number) => b },
+  { id: 8, name: "NOT-A",sym: "¬A", op: (a: number, _: number) => 1-a },
+  { id: 9, name: "NOT-B",sym: "¬B", op: (_: number, b: number) => 1-b },
 ];
 
-function PuzzleLogic({ onSolve, onPenalty }) {
+function PuzzleLogic({ onSolve, onPenalty }: { onSolve: () => void, onPenalty: () => void }) {
   const [inp, setInp] = useState({ a: 1, b: 0 });
   const [countdown, setCountdown] = useState(60);
-  const [ring, setRing] = useState([null, null, null, null]); // 4 slots
-  const [bench, setBench] = useState(ALL_GATES.map(g => g.id));
-  const [selBench, setSelBench] = useState(null);
-  const [selRing, setSelRing] = useState(null);
+  const [ring, setRing] = useState<(number | null)[]>([null, null, null, null]); // 4 slots
+  const [bench, setBench] = useState<number[]>(ALL_GATES.map(g => g.id));
+  const [selBench, setSelBench] = useState<number | null>(null);
+  const [selRing, setSelRing] = useState<number | null>(null);
   const [valErr, setValErr] = useState("");
   const [solved, setSolved] = useState(false);
-  const [vSet, setVSet] = useState(() => new Set());
+  const [vSet, setVSet] = useState<Set<string>>(() => new Set());
   const { cd, active: cdActive, trigger: triggerCd } = useCooldown(120);
 
   useEffect(() => {
@@ -979,10 +1021,10 @@ function PuzzleLogic({ onSolve, onPenalty }) {
     return () => clearInterval(id);
   }, [solved]);
 
-  const gById = id => ALL_GATES.find(g => g.id === id);
+  const gById = (id: number) => ALL_GATES.find(g => g.id === id)!;
 
   // Place from bench to ring slot
-  const handleRingSlotClick = (ri) => {
+  const handleRingSlotClick = (ri: number) => {
     if (cdActive) return;
     if (selBench !== null) {
       const nr = [...ring]; const nb = [...bench];
@@ -994,15 +1036,18 @@ function PuzzleLogic({ onSolve, onPenalty }) {
     } else if (ring[ri] !== null) {
       // Remove from ring back to bench
       const nr = [...ring]; const nb = [...bench];
-      nb.push(nr[ri]); nr[ri] = null;
-      setRing(nr); setBench(nb.sort((a,b)=>a-b)); setSelRing(null);
+      const val = nr[ri];
+      if (val !== null) {
+        nb.push(val); nr[ri] = null;
+        setRing(nr); setBench(nb.sort((a,b)=>a-b)); setSelRing(null);
+      }
     }
   };
 
   const validate = () => {
     if (cdActive) return;
     if (ring.some(r => r === null)) { setValErr("Place all 4 gates in the ring first."); return; }
-    const ringG = ring.map(id => gById(id));
+    const ringG = ring.map(id => gById(id!));
     const outs = ringG.map(g => g.op(inp.a, inp.b));
     for (let i = 0; i < 4; i++) {
       if (outs[i] === outs[(i+1)%4]) {
@@ -1036,13 +1081,12 @@ function PuzzleLogic({ onSolve, onPenalty }) {
               {[0,1,2,3].map(i => {
                 const angle = (i/4)*2*Math.PI - Math.PI/2;
                 const x = cx + r*Math.cos(angle), y = cy + r*Math.sin(angle);
-                const g = ringG[i]; const isEmpty = g === null;
-                const isConflict = false; // hidden
+                const g = ringG[i];
                 const isSel = selBench !== null;
                 return (
                   <g key={i} onClick={() => handleRingSlotClick(i)} style={{ cursor: cdActive ? "not-allowed" : "pointer" }}>
-                    <circle cx={x} cy={y} r={28} fill={isEmpty ? "#050610" : "#090912"} stroke={isEmpty ? (isSel ? "#d4aa5066" : "#1e2848") : "#4a7aff44"} strokeWidth={isEmpty ? 1 : 1.5} strokeDasharray={isEmpty ? "4 4" : "none"} />
-                    {isEmpty ? (
+                    <circle cx={x} cy={y} r={28} fill={!g ? "#050610" : "#090912"} stroke={!g ? (isSel ? "#d4aa5066" : "#1e2848") : "#4a7aff44"} strokeWidth={!g ? 1 : 1.5} strokeDasharray={!g ? "4 4" : "none"} />
+                    {!g ? (
                       <text x={x} y={y+4} textAnchor="middle" fill="#1e2848" fontSize={8} fontFamily="monospace">EMPTY</text>
                     ) : (
                       <>
@@ -1072,7 +1116,7 @@ function PuzzleLogic({ onSolve, onPenalty }) {
             </div>
           </div>
           <div style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column", gap: 12 }}>
-            <Card style={{ padding: "13px 16px" }}>
+            <Card glow="#7a9fff" style={{ padding: "13px 16px" }}>
               <Label>GATE BANK — CLICK TO SELECT</Label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
                 {bench.map(id => { const g = gById(id); const isSel = selBench === id; return (
@@ -1085,15 +1129,15 @@ function PuzzleLogic({ onSolve, onPenalty }) {
               </div>
               {selBench !== null && <div style={{ marginTop: 8, fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: "#d4aa50", letterSpacing: 2 }}>▸ {gById(selBench).name} selected — click a ring slot</div>}
             </Card>
-            <Card style={{ padding: "13px 16px" }}>
+            <Card glow="#7a9fff" style={{ padding: "13px 16px" }}>
               <Label>INPUT SHIFTS IN</Label>
               <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 22, color: countdown <= 10 ? "#e05060" : "#7a9fff" }}>{fmtTime(countdown)}</div>
             </Card>
-            <Card style={{ padding: "13px 16px" }}>
+            <Card glow="#7a9fff" style={{ padding: "13px 16px" }}>
               <Label>VALIDATIONS ({vSet.size}/2)</Label>
               <div style={{ display: "flex", gap: 8 }}>{[0,1].map(i => <div key={i} style={{ width: 28, height: 28, borderRadius: "50%", background: vSet.size > i ? "#4a7aff" : "#050610", border: `1px solid ${vSet.size > i ? "#4a7aff" : "#1e2848"}`, transition: "all .3s" }} />)}</div>
             </Card>
-            <Card style={{ padding: "13px 16px" }}>
+            <Card glow="#7a9fff" style={{ padding: "13px 16px" }}>
               <Label>GATE REFERENCE</Label>
               {[{n:"AND",s:"∧",t:"1 only if A=1 & B=1"},{n:"OR",s:"∨",t:"1 if A or B=1"},{n:"XOR",s:"⊕",t:"1 if A≠B"},{n:"NAND",s:"⊼",t:"0 only if A=1 & B=1"},{n:"NOR",s:"⊽",t:"0 if A or B=1"},{n:"XNOR",s:"⊙",t:"1 if A=B"},{n:"BUF-A",s:"▷",t:"Output = A"},{n:"BUF-B",s:"◁",t:"Output = B"},{n:"NOT-A",s:"¬A",t:"Output = NOT A"},{n:"NOT-B",s:"¬B",t:"Output = NOT B"}].map(g => (
                 <div key={g.n} style={{ padding: "5px 8px", marginBottom: 3, background: "#050610", border: "1px solid #14182e", display: "flex", gap: 8, alignItems: "center" }}>
@@ -1102,7 +1146,7 @@ function PuzzleLogic({ onSolve, onPenalty }) {
                 </div>
               ))}
             </Card>
-            {valErr && <Card style={{ borderColor: valErr.startsWith("✓") ? "#4a7aff" : "#cc3344", padding: "12px 16px", animation: "fadeIn .3s" }}><div style={{ fontFamily: "'Crimson Text',serif", fontSize: 14, color: valErr.startsWith("✓") ? "#7a9fff" : "#6a7a9a", lineHeight: 1.8 }}>{valErr}</div></Card>}
+            {valErr && <Card glow="#cc3344" style={{ borderColor: valErr.startsWith("✓") ? "#4a7aff" : "#cc3344", padding: "12px 16px", animation: "fadeIn .3s" }}><div style={{ fontFamily: "'Crimson Text',serif", fontSize: 14, color: valErr.startsWith("✓") ? "#7a9fff" : "#6a7a9a", lineHeight: 1.8 }}>{valErr}</div></Card>}
             <Btn onClick={validate} color="#7a9fff" disabled={cdActive} style={{ width: "100%", padding: "13px 0", fontSize: 12 }}>⬡ VALIDATE RING</Btn>
           </div>
         </div>
@@ -1126,8 +1170,8 @@ const CW = [
   { clue: "Remove one line from me, and tomorrow's historians inherit a different yesterday.", answer: "REGISTER", keyLetter: "R" },
 ];
 const CW_KEYWORD = "TORECOVER";
-function PuzzleCrossword({ onSolve, onPenalty }) {
-  const [vals, setVals] = useState(CW.map(() => "")); const [err, setErr] = useState("");
+function PuzzleCrossword({ onSolve, onPenalty }: { onSolve: () => void, onPenalty: () => void }) {
+  const [vals, setVals] = useState<string[]>(CW.map(() => "")); const [err, setErr] = useState("");
   const [solved, setSolved] = useState(false);
   const { cd, active: cdActive, trigger: triggerCd } = useCooldown(120);
   const [attempts, setAttempts] = useState(0); const [hints, setHints] = useState(false);
@@ -1145,7 +1189,7 @@ function PuzzleCrossword({ onSolve, onPenalty }) {
       <CooldownOverlay cd={cd} />
       {solved ? <SolvedCard word="TO RECOVER. The directive was never written outright — it survived only in the initials." fragLabel="TO RECOVER — FRAGMENT VI" fragColor="#cc3344" onReturn={onSolve} /> : (
         <>
-          <Card style={{ marginBottom: 16, background: "#08091a", borderColor: "#1e2848", padding: "16px 20px" }}>
+          <Card glow="#1e2848" style={{ marginBottom: 16, background: "#08091a", borderColor: "#1e2848", padding: "16px 20px" }}>
             <Label>ACROSTIC KEY — FIRST LETTER OF EACH ANSWER</Label>
             <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 10 }}>
               {CW.map((c, i) => { const v = vals[i].trim().toUpperCase(); const ok = v === c.answer; const fl = ok ? c.keyLetter : (v.length > 0 ? v[0] : "_"); return <div key={i} style={{ width: 34, height: 42, display: "flex", alignItems: "center", justifyContent: "center", background: "#050610", border: `1px solid ${ok ? "#4a7aff44" : "#14182e"}`, flexDirection: "column", gap: 2 }}><span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 17, color: ok ? "#7a9fff" : "#1e2848", transition: "color .3s" }}>{fl}</span><span style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 7, color: "#1e2848" }}>{i + 1}</span></div>; })}
@@ -1153,7 +1197,7 @@ function PuzzleCrossword({ onSolve, onPenalty }) {
             <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 13, color: "#4a7aff", letterSpacing: 5 }}>{keyword}</div>
           </Card>
           {CW.map((c, i) => (
-            <Card key={i} style={{ marginBottom: 8, padding: "13px 16px" }}>
+            <Card key={i} glow="#1e2848" style={{ marginBottom: 8, padding: "13px 16px" }}>
               <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
                 <div style={{ fontFamily: "'Cinzel',serif", fontSize: 12, color: "#1e2848", minWidth: 20 }}>{i + 1}.</div>
                 <div style={{ flex: 1, fontFamily: "'Crimson Text',serif", fontSize: 15, color: "#6a7a9a", lineHeight: 1.8, fontStyle: "italic", minWidth: 180 }}>{c.clue}</div>
@@ -1164,7 +1208,7 @@ function PuzzleCrossword({ onSolve, onPenalty }) {
               {hints && <HintBox text={`${c.answer.length} letters. Starts with: ${c.keyLetter}.`} />}
             </Card>
           ))}
-          <Card><Btn onClick={submit} color="#4a7aff" disabled={cdActive}>CONFIRM ANSWERS</Btn>{err && <ErrMsg msg={err} />}</Card>
+          <Card glow="#1e2848"><Btn onClick={submit} color="#4a7aff" disabled={cdActive}>CONFIRM ANSWERS</Btn>{err && <ErrMsg msg={err} />}</Card>
         </>
       )}
     </PuzzleShell>
@@ -1184,7 +1228,7 @@ const FINAL_MSG = [
   { s: "Everything I hid, I hid for this moment. For you.", fl: "E" },
 ];
 const FINAL_ANS = "RESTORE";
-function PuzzleFinal({ onSolve, onPenalty }) {
+function PuzzleFinal({ onSolve, onPenalty }: { onSolve: () => void, onPenalty: () => void }) {
   const [ans, setAns] = useState(""); const [err, setErr] = useState(""); const [solved, setSolved] = useState(false);
   const { cd, active: cdActive, trigger: triggerCd } = useCooldown(120);
   const [attempts, setAttempts] = useState(0); const [reveal, setReveal] = useState(false);
@@ -1200,7 +1244,7 @@ function PuzzleFinal({ onSolve, onPenalty }) {
       <CooldownOverlay cd={cd} />
       {solved ? <SolvedCard word="RESTORE. Seven letters. The Archive is open. Aurelis is remembered." fragLabel="RESTORE — FINAL FRAGMENT" fragColor="#7a9fff" onReturn={onSolve} /> : (
         <>
-          <Card style={{ marginBottom: 20, background: "#08091a", borderColor: "#1e2848", padding: "26px 30px" }}>
+          <Card glow="#1e2848" style={{ marginBottom: 20, background: "#08091a", borderColor: "#1e2848", padding: "26px 30px" }}>
             <Label>VOSS'S FINAL NOTE — SUBLEVEL 3 ARCHIVE</Label>
             {FINAL_MSG.map((line, i) => (
               <div key={i} style={{ display: "flex", gap: 14, alignItems: "flex-start", marginBottom: 16, animation: `fadeUp .5s ${i * .08}s ease-out both` }}>
@@ -1209,7 +1253,7 @@ function PuzzleFinal({ onSolve, onPenalty }) {
               </div>
             ))}
           </Card>
-          <Card>
+          <Card glow="#1e2848">
             <Label>THE HIDDEN WORD</Label>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
               <input value={ans} onChange={e => { setAns(e.target.value.toUpperCase()); setErr(""); }} onKeyDown={e => e.key === "Enter" && !cdActive && submit()} placeholder="ENTER THE WORD..."
@@ -1228,7 +1272,7 @@ function PuzzleFinal({ onSolve, onPenalty }) {
 // ═══════════════════════════════════════════════
 // PUZZLE TRANSITION
 // ═══════════════════════════════════════════════
-function PuzzleTransition({ entry, onBegin }) {
+function PuzzleTransition({ entry, onBegin }: { entry: any, onBegin: () => void }) {
   return (
     <div style={{ minHeight: "100vh", background: "#06070e", display: "flex", alignItems: "center", justifyContent: "center", padding: 24 }}>
       <div style={{ position: "fixed", inset: 0, background: "radial-gradient(ellipse at 50% 38%,#0c1228,#06070e 65%)", zIndex: 0 }} />
@@ -1250,9 +1294,20 @@ function FadeBlack() { return <div style={{ position: "fixed", inset: 0, backgro
 // ═══════════════════════════════════════════════
 // OPENING
 // ═══════════════════════════════════════════════
-function OpeningTitle({ onStart }) {
+function OpeningTitle({ onStart }: { onStart: () => void }) {
   const handle = () => {
-    try { const ctx = getCtx(); if (ctx.state === "suspended") ctx.resume().catch(()=>{}); setTimeout(() => { try { music.play(SCENE_THEME[FLOW[0].bg] || "scene"); } catch {} }, 100); } catch {}
+    try {
+      const ctx = getCtx();
+      if (ctx.state === "suspended") ctx.resume().catch(()=>{});
+      setTimeout(() => {
+        try {
+          const firstBg = FLOW[0].bg;
+          if (firstBg) {
+            music.play(SCENE_THEME[firstBg] || "scene");
+          }
+        } catch {}
+      }, 100);
+    } catch {}
     onStart();
   };
   return (
@@ -1265,7 +1320,7 @@ function OpeningTitle({ onStart }) {
         <div style={{ fontFamily: "'Cinzel',serif", fontSize: "clamp(30px,7vw,58px)", color: "#7a9fff", letterSpacing: 5, marginBottom: 6, textShadow: "0 0 70px #4a7aff55", fontWeight: 700, lineHeight: 1.1 }}>THE LOST<br />CHRONICLE</div>
         <div style={{ height: 1, background: "linear-gradient(90deg,transparent,#4a7aff,transparent)", margin: "20px auto", maxWidth: 320 }} />
         <div style={{ fontFamily: "'Crimson Text',serif", fontSize: 17, color: "#5a6a8a", fontStyle: "italic", lineHeight: 2, marginBottom: 32 }}>Someone has been erased from history.<br />Not lost — erased. Deliberately.</div>
-        <Btn onClick={handle} color="#4a7aff" style={{ width: "100%", padding: "15px 0", fontSize: 14, letterSpacing: 5 }}>▸ ENTER THE ARCHIVE</Btn>
+        <Btn onClick={handle} disabled={false} color="#4a7aff" style={{ width: "100%", padding: "15px 0", fontSize: 14, letterSpacing: 5 }}>▸ ENTER THE ARCHIVE</Btn>
         <div style={{ marginTop: 14, fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: "#1e2848", letterSpacing: 2 }}>ORCHESTRAL SCORE · CINEMATIC SCENES</div>
       </div>
     </div>
@@ -1275,9 +1330,14 @@ function OpeningTitle({ onStart }) {
 // ═══════════════════════════════════════════════
 // ENDING
 // ═══════════════════════════════════════════════
-function Ending({ elapsed, onClose }) {
+interface LeaderboardEntry {
+  time: string;
+  rawSecs: number;
+}
+
+function Ending({ elapsed, onClose }: { elapsed: number, onClose: () => void }) {
   const [phase, setPhase] = useState(0);
-  const [lb, setLb] = useState([]); const [lbReady, setLbReady] = useState(false);
+  const [lb, setLb] = useState<LeaderboardEntry[]>([]); const [lbReady, setLbReady] = useState(false);
   useEffect(() => {
     music.stopAll();
     [0, 2000, 4000, 6200, 8400, 11000].forEach((d, i) => setTimeout(() => setPhase(s => Math.max(s, i+1)), d));
@@ -1286,11 +1346,30 @@ function Ending({ elapsed, onClose }) {
     if (phase >= 4) {
       music.play("finale"); sfx("solve");
       (async () => {
-        try { await window.storage.set(`lb:${Date.now()}`, JSON.stringify({ time: fmtTime(elapsed), rawSecs: elapsed }), true); } catch {}
-        try { const keys = await window.storage.list("lb:", true); const entries = await Promise.all((keys.keys||[]).map(async k => { try { const r = await window.storage.get(k,true); return r?JSON.parse(r.value):null; } catch{return null;} })); setLb(entries.filter(Boolean).sort((a,b)=>a.rawSecs-b.rawSecs).slice(0,10)); setLbReady(true); } catch{setLbReady(true);}
+        const storage = (window as any).storage;
+        if (storage) {
+          try { await storage.set(`lb:${Date.now()}`, JSON.stringify({ time: fmtTime(elapsed), rawSecs: elapsed }), true); } catch {}
+          try {
+            const keys = await storage.list("lb:", true);
+            const entries = await Promise.all((keys.keys || []).map(async (k: string) => {
+              try {
+                const r = await storage.get(k, true);
+                return r ? JSON.parse(r.value) : null;
+              } catch {
+                return null;
+              }
+            }));
+            setLb((entries.filter(Boolean) as LeaderboardEntry[]).sort((a, b) => a.rawSecs - b.rawSecs).slice(0, 10));
+            setLbReady(true);
+          } catch {
+            setLbReady(true);
+          }
+        } else {
+          setLbReady(true);
+        }
       })();
     }
-  }, [phase]);
+  }, [phase, elapsed]);
   const REVEALS = [
     { t: "AURELIS EXISTED.", f: "'Cinzel',serif", s: "clamp(24px,4vw,40px)", c: "#dde4f5" },
     { t: "Not as a myth. As one man who walked every road and held the world's record together for nine centuries.", f: "'Crimson Text',serif", s: 18, c: "#b0bcd4" },
@@ -1320,7 +1399,7 @@ function Ending({ elapsed, onClose }) {
         {phase >= 6 && (
           <div style={{ animation: "fadeUp 1s ease-out" }}>
             <div style={{ height: 1, background: "linear-gradient(90deg,transparent,#4a7aff,transparent)", margin: "22px 0" }} />
-            <Card style={{ marginBottom: 22, padding: 34, borderColor: "#1e2848" }}>
+            <Card glow="#1e2848" style={{ marginBottom: 22, padding: 34, borderColor: "#1e2848" }}>
               <Label>CASE DOSSIER · CF-02-HIS-1978</Label>
               <div style={{ fontFamily: "'Cinzel',serif", fontSize: 28, color: "#7a9fff", letterSpacing: 4, marginBottom: 4 }}>Archive Restored</div>
               <div style={{ fontFamily: "'Share Tech Mono',monospace", fontSize: 8, color: "#1e2848", letterSpacing: 5, marginBottom: 28 }}>THE TIMELINE HAS BEEN STABILISED</div>
@@ -1329,7 +1408,7 @@ function Ending({ elapsed, onClose }) {
                 <div style={{ fontFamily: "'Cinzel',serif", fontSize: 42, color: "#7a9fff", letterSpacing: 6, textShadow: "0 0 28px #4a7aff44" }}>{fmtTime(elapsed)}</div>
               </div>
             </Card>
-            <Card style={{ marginBottom: 24 }}>
+            <Card glow="#1e2848" style={{ marginBottom: 24 }}>
               <div style={{ fontFamily: "'Cinzel',serif", fontSize: 10, color: "#1e2848", letterSpacing: 5, textAlign: "center", marginBottom: 16 }}>HALL OF INVESTIGATORS</div>
               {!lbReady && <div style={{ textAlign: "center", fontFamily: "'Share Tech Mono',monospace", fontSize: 10, color: "#1e2848", padding: 14 }}>Accessing records…</div>}
               {lbReady && lb.map((e, i) => (
@@ -1339,7 +1418,7 @@ function Ending({ elapsed, onClose }) {
                 </div>
               ))}
             </Card>
-            <Btn onClick={() => { music.stopAll(); onClose(); }} color="#7a9fff" style={{ fontSize: 13, padding: "14px 46px", letterSpacing: 5 }}>◈ CASE CLOSED</Btn>
+            <Btn onClick={() => { music.stopAll(); onClose(); }} disabled={false} color="#7a9fff" style={{ fontSize: 13, padding: "14px 46px", letterSpacing: 5 }}>◈ CASE CLOSED</Btn>
             <div style={{ marginTop: 12, fontFamily: "'Crimson Text',serif", fontSize: 16, color: "#1e2848", fontStyle: "italic" }}>Aurelis has been remembered.</div>
           </div>
         )}
@@ -1359,7 +1438,7 @@ export default function App() {
   const [timerOn, setTimerOn] = useState(false);
   const [penalties, setPenalties] = useState(0);
   const [solvedCount, setSolvedCount] = useState(0);
-  const timerRef = useRef(null);
+  const timerRef = useRef<any>(null);
 
   useEffect(() => {
     if (timerOn) { timerRef.current = setInterval(() => setElapsed(e => e+1), 1000); }
@@ -1382,7 +1461,10 @@ export default function App() {
       if (ne.type === "scene") {
         setTimerOn(false);
         setStage("scene");
-        setTimeout(() => music.play(SCENE_THEME[ne.bg] || "scene"), 900);
+        const neBg = ne.bg;
+        if (neBg) {
+          setTimeout(() => music.play(SCENE_THEME[neBg] || "scene"), 900);
+        }
       } else {
         setStage("puzzle_intro");
       }

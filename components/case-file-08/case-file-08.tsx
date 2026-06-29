@@ -1,6 +1,66 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Lock, Unlock, Terminal as TerminalIcon, ChevronRight, AlertTriangle, RotateCcw, Search, HelpCircle, Check, Clock, Skull } from "lucide-react";
 
+interface DialogueCutsceneProps {
+  sceneKey: keyof typeof SCENES;
+  onComplete: () => void;
+}
+
+interface HintPanelProps {
+  hints: string[];
+  usedCount: number;
+  onUseHint: (idx: number) => void;
+  penaltyTotal: number;
+}
+
+interface PuzzleFrameProps {
+  index: number;
+  title: string;
+  prompt: string;
+  status: { ok: boolean; msg: string } | null;
+  hints: string[];
+  hintUsed: number;
+  onUseHint: (idx: number) => void;
+  penaltyTotal: number;
+  children: React.ReactNode;
+}
+
+interface PuzzleProps {
+  fragments?: Record<string, string>;
+  onSolve: (key: string, value: string) => void;
+  hintUsed: number;
+  onUseHint: (idx: number) => void;
+  penaltyTotal: number;
+}
+
+interface Puzzle9Props extends PuzzleProps {
+  fragments: Record<string, string>;
+}
+
+interface HeaderProps {
+  fragments: Record<string, string>;
+  solvedCount: number;
+  elapsed: number;
+  penalty: number;
+  onRestart: () => void;
+  muted: boolean;
+  onToggleMute: () => void;
+}
+
+interface SplashScreenProps {
+  onStart: () => void;
+}
+
+interface AnswerKeyProps {
+  elapsed: number;
+  penalty: number;
+  onRestart: () => void;
+}
+
+type SequenceStep =
+  | { type: "cutscene"; key: string; idx?: never }
+  | { type: "puzzle"; idx: number; key?: never };
+
 /* ============================================================
    THE BROKEN DECK — HARD MODE
    • Timer starts when first puzzle begins
@@ -103,12 +163,15 @@ const SCENES = {
 
 /* ── MUSIC ENGINE ── */
 function useMusicEngine() {
-  const ctxRef = useRef(null);
-  const nodesRef = useRef({});
+  const ctxRef = useRef<AudioContext | null>(null);
+  const nodesRef = useRef<any>({});
   const startedRef = useRef(false);
 
-  function getCtx() {
-    if (!ctxRef.current) ctxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+  function getCtx(): AudioContext {
+    if (!ctxRef.current) {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      ctxRef.current = new AudioCtx();
+    }
     return ctxRef.current;
   }
 
@@ -136,7 +199,7 @@ function useMusicEngine() {
     nodesRef.current.reverbGain = reverbGain;
 
     // Low drone — two detuned oscillators
-    function makeDrone(freq, detune, gainVal) {
+    function makeDrone(freq: number, detune: number, gainVal: number) {
       const osc = ctx.createOscillator();
       osc.type = "sine";
       osc.frequency.value = freq;
@@ -249,7 +312,7 @@ function useMusicEngine() {
     nodesRef.current.noiseGain = noiseGain;
   }
 
-  function setVolume(v) {
+  function setVolume(v: number) {
     if (nodesRef.current.master) {
       nodesRef.current.master.gain.setTargetAtTime(v, getCtx().currentTime, 0.3);
     }
@@ -274,7 +337,7 @@ function useMusicEngine() {
 }
 
 /* ── TIMER UTILITIES ── */
-function formatTime(secs) {
+function formatTime(secs: number) {
   const h = Math.floor(secs / 3600);
   const m = Math.floor((secs % 3600) / 60);
   const s = secs % 60;
@@ -284,19 +347,22 @@ function formatTime(secs) {
 
 /* ── DIALOGUE ENGINE ── */
 const DEFAULT_PAUSE = 2400;
-function DialogueCutscene({ sceneKey, onComplete }) {
+function DialogueCutscene({ sceneKey, onComplete }: DialogueCutsceneProps) {
   const lines = SCENES[sceneKey] || [];
   const [current, setCurrent] = useState(0);
   const [locked, setLocked] = useState(true);
   const [visible, setVisible] = useState(false);
-  const timerRef = useRef(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setVisible(false);
     const t1 = setTimeout(() => setVisible(true), 80);
     setLocked(true);
     timerRef.current = setTimeout(() => setLocked(false), lines[current]?.pause ?? DEFAULT_PAUSE);
-    return () => { clearTimeout(t1); clearTimeout(timerRef.current); };
+    return () => {
+      clearTimeout(t1);
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
   }, [current, sceneKey]);
 
   function advance() {
@@ -307,7 +373,7 @@ function DialogueCutscene({ sceneKey, onComplete }) {
 
   const line = lines[current];
   if (!line) return null;
-  const char = CHARS[line.char];
+  const char = CHARS[line.char as keyof typeof CHARS];
   const isUser = line.char === "USER";
   const isSystem = line.char === "SYSTEM";
 
@@ -357,19 +423,21 @@ function DialogueCutscene({ sceneKey, onComplete }) {
 const PENALTY_SECS = 60;
 const MAX_HINTS = 3;
 
-function HintPanel({ hints, usedCount, onUseHint, penaltyTotal }) {
+function HintPanel({ hints, usedCount, onUseHint, penaltyTotal }: HintPanelProps) {
   const [revealed, setRevealed] = useState(-1);
   const [confirming, setConfirming] = useState(false);
-  const [nextIdx, setNextIdx] = useState(null);
+  const [nextIdx, setNextIdx] = useState<number | null>(null);
 
-  function requestHint(idx) {
+  function requestHint(idx: number) {
     if (idx <= revealed || usedCount >= MAX_HINTS) return;
     setNextIdx(idx);
     setConfirming(true);
   }
   function confirmHint() {
-    onUseHint(nextIdx);
-    setRevealed(nextIdx);
+    if (nextIdx !== null) {
+      onUseHint(nextIdx);
+      setRevealed(nextIdx);
+    }
     setConfirming(false);
   }
 
@@ -421,7 +489,7 @@ function HintPanel({ hints, usedCount, onUseHint, penaltyTotal }) {
 }
 
 /* ── PUZZLE FRAME ── */
-function PuzzleFrame({ index, title, prompt, status, hints, hintUsed, onUseHint, penaltyTotal, children }) {
+function PuzzleFrame({ index, title, prompt, status, hints, hintUsed, onUseHint, penaltyTotal, children }: PuzzleFrameProps) {
   return (
     <div className="bd-puzzle">
       <div className="bd-puzzle-head">
@@ -454,10 +522,10 @@ const P1_HINTS = [
   "The format required is DD-MON-YYYY (e.g. 09-SEP-1972). The month abbreviation must be three letters.",
 ];
 
-function Puzzle1({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
-  const [revealedBars, setRevealedBars] = useState({});
+function Puzzle1({ onSolve, hintUsed, onUseHint, penaltyTotal }: PuzzleProps) {
+  const [revealedBars, setRevealedBars] = useState<Record<number, boolean>>({});
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState(null);
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const bars = [
     { id:0, reveal:null }, { id:1, reveal:"XIV" }, { id:2, reveal:null },
@@ -468,9 +536,9 @@ function Puzzle1({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
 
   const VALID = ["14-oct-1972","14 oct 1972","14 october 1972","oct 14 1972","14/10/1972"];
 
-  function toggle(id) { setRevealedBars(r => ({ ...r, [id]: !r[id] })); }
+  function toggle(id: number) { setRevealedBars(r => ({ ...r, [id]: !r[id] })); }
 
-  function submit(e) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     const clean = input.trim().toLowerCase().replace(/[,\.]/g,"");
     if (VALID.includes(clean)) {
@@ -516,11 +584,11 @@ const P2_HINTS = [
   "The target is Report_04. Now confirm it by checking the deleted-files folder hidden at the very bottom of the page.",
 ];
 
-function Puzzle2({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
-  const [open, setOpen] = useState(null);
+function Puzzle2({ onSolve, hintUsed, onUseHint, penaltyTotal }: PuzzleProps) {
+  const [open, setOpen] = useState<string | null>(null);
   const [deletedOpen, setDeletedOpen] = useState(false);
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState(null);
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const reports = [
     { id:"01", text:"The anomaly documented three entries beyond this filing precedes all subsequent analysis." },
@@ -531,7 +599,7 @@ function Puzzle2({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
     { id:"07", text:"The subject roster in this file mirrors one compiled three entries earlier in the record." },
   ];
 
-  function submit(e) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     const c = input.trim().toLowerCase().replace(/report_?/g,"").replace(/\s/g,"");
     if (["04","4","0004"].includes(c)) {
@@ -585,19 +653,19 @@ const VIGENERE_PAIRS = [
   { key:"K", cipher:"P", plain:"L" },
 ];
 
-function Puzzle3({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
-  const [decoded, setDecoded] = useState(["","","",""]);
+function Puzzle3({ onSolve, hintUsed, onUseHint, penaltyTotal }: PuzzleProps) {
+  const [decoded, setDecoded] = useState<string[]>(["","","",""]);
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState(null);
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [showTable, setShowTable] = useState(false);
 
-  function setLetter(i, v) {
+  function setLetter(i: number, v: string) {
     const d = [...decoded];
     d[i] = v.toUpperCase().slice(-1);
     setDecoded(d);
   }
 
-  function submit(e) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     if (input.trim().toUpperCase() === "NULL") {
       setStatus({ ok:true, msg:"Cabinet lock disengaged." });
@@ -670,10 +738,10 @@ const P4_HINTS = [
   "The correct level is IX (nine). Three stamps confirm it. One stamp reads 1000 (decimal 8) — that's the forgery. Submit 'Level IX'.",
 ];
 
-function Puzzle4({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
+function Puzzle4({ onSolve, hintUsed, onUseHint, penaltyTotal }: PuzzleProps) {
   const [openManual, setOpenManual] = useState(false);
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState(null);
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
   const stamps = [
     { id:1, text:"ARCHIVE DEPTH: 1001", forged:false },
@@ -682,7 +750,7 @@ function Puzzle4({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
     { id:4, text:"ARCHIVE DEPTH: 1001", forged:false },
   ];
 
-  function submit(e) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     const c = input.trim().toLowerCase().replace("level","").trim();
     if (["ix","9"].includes(c) || input.trim().toLowerCase() === "level ix") {
@@ -736,10 +804,10 @@ const P5_HINTS = [
   "The room is the Observation Chamber. Fragments 1 and 3 both confirm this name indirectly. Submit exactly: Observation Chamber",
 ];
 
-function Puzzle5({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
-  const [openExcerpt, setOpenExcerpt] = useState(null);
+function Puzzle5({ onSolve, hintUsed, onUseHint, penaltyTotal }: PuzzleProps) {
+  const [openExcerpt, setOpenExcerpt] = useState<number | null>(null);
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState(null);
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // 3×3 grid. Cell (2,3) = unknown
   const grid = [
@@ -755,7 +823,7 @@ function Puzzle5({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
     { id:4, coord:"(3,3)", text:"Grid ref 3-3: Sublevel access hatch welded shut post-incident — never reopened." },
   ];
 
-  function submit(e) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     if (input.trim().toLowerCase() === "observation chamber") {
       setStatus({ ok:true, msg:"Blueprint updated." });
@@ -811,16 +879,16 @@ const SEARCH_INDEX = {
 };
 const ALL_NOTES = ["Memory","Reality","Perception","Identity","Consciousness","Banana"];
 
-function Puzzle6({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
+function Puzzle6({ onSolve, hintUsed, onUseHint, penaltyTotal }: PuzzleProps) {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState([]);
-  const [selected, setSelected] = useState(null);
-  const [status, setStatus] = useState(null);
+  const [results, setResults] = useState<{ q: string; entry: string }[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
-  function runSearch(e) {
+  function runSearch(e: React.FormEvent) {
     e.preventDefault();
     const key = query.trim().toLowerCase();
-    const count = SEARCH_INDEX[key];
+    const count = SEARCH_INDEX[key as keyof typeof SEARCH_INDEX];
     const entry = count === undefined
       ? `"${query}" — no index entry found.`
       : count === 0
@@ -874,9 +942,9 @@ const P7_HINTS = [
   "The Hearts testimony says: '...the last conversation I had with my mother — the emotion in that moment.' That is the only explicit trait-name. Select Hearts.",
 ];
 
-function Puzzle7({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
-  const [open, setOpen] = useState(null);
-  const [status, setStatus] = useState(null);
+function Puzzle7({ onSolve, hintUsed, onUseHint, penaltyTotal }: PuzzleProps) {
+  const [open, setOpen] = useState<string | null>(null);
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
   const [showRef, setShowRef] = useState(false);
 
   const cabinets = [
@@ -886,7 +954,7 @@ function Puzzle7({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
     { suit:"♣", label:"Clubs",    text:"I chose the cabinet that reflected my drive — the early mornings, the ruthlessness it took to climb. I saw the version of myself I'd decided to become at nineteen." },
   ];
 
-  function choose(label) {
+  function choose(label: string) {
     if (label === "Hearts") {
       setStatus({ ok:true, msg:"Testimony matched. Cabinet identified." });
       setTimeout(() => onSolve("cabinet","HEARTS"), 500);
@@ -918,7 +986,7 @@ function Puzzle7({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
       </div>
       {open && (
         <div className="bd-testimony">
-          <p>"{cabinets.find(c=>c.label===open).text}"</p>
+          <p>"{cabinets.find(c => c.label === open)?.text || ""}"</p>
           <button className="bd-btn" onClick={() => choose(open)}>THIS IS THE ONE</button>
         </div>
       )}
@@ -939,11 +1007,11 @@ const P8_HINTS = [
   "The missing entry is Entry 3. It sits between the preparation entry (Entry 2) and the unexpected return entry (Entry 4). Submit '3' or 'Entry 3'.",
 ];
 
-function Puzzle8({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
-  const [open, setOpen] = useState(null);
+function Puzzle8({ onSolve, hintUsed, onUseHint, penaltyTotal }: PuzzleProps) {
+  const [open, setOpen] = useState<number | null>(null);
   const [showHex, setShowHex] = useState(false);
   const [input, setInput] = useState("");
-  const [status, setStatus] = useState(null);
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
   // Entries shown OUT of order deliberately
   const entries = [
@@ -953,7 +1021,7 @@ function Puzzle8({ onSolve, hintUsed, onUseHint, penaltyTotal }) {
     { id:2, ts:"03:31", text:"Cabinets opened in sequence. Preparation complete. Cabinet seals confirmed." },
   ];
 
-  function submit(e) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     const c = input.trim().toLowerCase().replace("entry","").trim();
     if (["3","03"].includes(c) || input.trim().toLowerCase() === "entry 3") {
@@ -1008,18 +1076,18 @@ const P9_HINTS = [
   "The final code is NULL-IX-04-HEARTS. Assign each fragment to its category and submit.",
 ];
 
-function Puzzle9({ fragments, onSolve, hintUsed, onUseHint, penaltyTotal }) {
+function Puzzle9({ fragments, onSolve, hintUsed, onUseHint, penaltyTotal }: Puzzle9Props) {
   // 6 options, 2 are decoys
   const OPTIONS = ["NULL","MERIDIAN","IX","VII","04","HEARTS"];
-  const SLOTS = { project:"PROJECT", clearance:"CLEARANCE", caseNumber:"CASE №", cabinet:"CABINET" };
-  const EXPECTED = { project:"NULL", clearance:"IX", caseNumber:"04", cabinet:"HEARTS" };
+  const SLOTS: Record<string, string> = { project:"PROJECT", clearance:"CLEARANCE", caseNumber:"CASE №", cabinet:"CABINET" };
+  const EXPECTED: Record<string, string> = { project:"NULL", clearance:"IX", caseNumber:"04", cabinet:"HEARTS" };
 
-  const [slots, setSlots] = useState({ project:"", clearance:"", caseNumber:"", cabinet:"" });
-  const [status, setStatus] = useState(null);
+  const [slots, setSlots] = useState<Record<string, string>>({ project:"", clearance:"", caseNumber:"", cabinet:"" });
+  const [status, setStatus] = useState<{ ok: boolean; msg: string } | null>(null);
 
-  function setSlot(key, val) { setSlots(s => ({ ...s, [key]: val })); }
+  function setSlot(key: string, val: string) { setSlots(s => ({ ...s, [key]: val })); }
 
-  function submit(e) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     if (Object.keys(EXPECTED).every(k => slots[k] === EXPECTED[k])) {
       setStatus({ ok:true, msg:"AUTHORIZATION ACCEPTED — ARCHIVE UNLOCKED." });
@@ -1059,7 +1127,7 @@ function Puzzle9({ fragments, onSolve, hintUsed, onUseHint, penaltyTotal }) {
 }
 
 /* ── HEADER ── */
-function Header({ fragments, solvedCount, elapsed, penalty, onRestart, muted, onToggleMute }) {
+function Header({ fragments, solvedCount, elapsed, penalty, onRestart, muted, onToggleMute }: HeaderProps) {
   const display = elapsed + penalty;
   return (
     <div className="bd-header">
@@ -1092,7 +1160,7 @@ function Header({ fragments, solvedCount, elapsed, penalty, onRestart, muted, on
 }
 
 /* ── SPLASH ── */
-function SplashScreen({ onStart }) {
+function SplashScreen({ onStart }: SplashScreenProps) {
   return (
     <div className="bd-splash">
       <div className="bd-splash-inner">
@@ -1140,8 +1208,8 @@ const ANSWERS = [
     explanation:"Six fragments: NULL (project), MERIDIAN (decoy), IX (clearance), VII (decoy from forged stamp), 04 (case number), HEARTS (cabinet). Correct code: NULL-IX-04-HEARTS." },
 ];
 
-function AnswerKey({ elapsed, penalty, onRestart }) {
-  const [open, setOpen] = useState(null);
+function AnswerKey({ elapsed, penalty, onRestart }: AnswerKeyProps) {
+  const [open, setOpen] = useState<number | null>(null);
   const total = elapsed + penalty;
   return (
     <div className="bd-answers">
@@ -1188,9 +1256,9 @@ function AnswerKey({ elapsed, penalty, onRestart }) {
 
 /* ── SEQUENCE ── */
 const PUZZLE_COMPONENTS = [Puzzle1,Puzzle2,Puzzle3,Puzzle4,Puzzle5,Puzzle6,Puzzle7,Puzzle8,Puzzle9];
-const CUTSCENE_KEYS = ["intro","afterDate","afterReport","afterNull","afterLevel","afterRoom","afterNote","afterSuit","afterEntry","final"];
+const CUTSCENE_KEYS = ["intro","afterDate","afterReport","afterNull","afterLevel","afterRoom","afterNote","afterSuit","afterEntry","final"] as const;
 
-const SEQUENCE = [];
+const SEQUENCE: SequenceStep[] = [];
 CUTSCENE_KEYS.slice(0,-1).forEach((key,i) => {
   SEQUENCE.push({ type:"cutscene", key });
   if (i < PUZZLE_COMPONENTS.length) SEQUENCE.push({ type:"puzzle", idx:i });
@@ -1201,7 +1269,7 @@ SEQUENCE.push({ type:"cutscene", key:"final" });
 export default function BrokenDeckGame() {
   const [phase, setPhase] = useState("splash");
   const [stage, setStage] = useState(0);
-  const [fragments, setFragments] = useState({});
+  const [fragments, setFragments] = useState<Record<string, string>>({});
   const [solvedCount, setSolvedCount] = useState(0);
   const [elapsed, setElapsed] = useState(0);
   const [penalty, setPenalty] = useState(0);
@@ -1209,8 +1277,8 @@ export default function BrokenDeckGame() {
   const [transitioning, setTransitioning] = useState(false);
   const [muted, setMuted] = useState(false);
   // per-puzzle hint state: array of usedCount per puzzle
-  const [puzzleHints, setPuzzleHints] = useState(Array(9).fill(0));
-  const intervalRef = useRef(null);
+  const [puzzleHints, setPuzzleHints] = useState<number[]>(Array(9).fill(0));
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const music = useMusicEngine();
 
   // Timer
@@ -1218,9 +1286,11 @@ export default function BrokenDeckGame() {
     if (timerActive) {
       intervalRef.current = setInterval(() => setElapsed(e => e+1), 1000);
     } else {
-      clearInterval(intervalRef.current);
+      if (intervalRef.current) clearInterval(intervalRef.current);
     }
-    return () => clearInterval(intervalRef.current);
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
   }, [timerActive]);
 
   function startGame() { setPhase("game"); setStage(0); music.start(); }
@@ -1248,13 +1318,13 @@ export default function BrokenDeckGame() {
     }, 380);
   }
 
-  function handleSolve(key, value) {
+  function handleSolve(key: string, value: string) {
     setFragments(f => ({ ...f, [key]: value }));
     setSolvedCount(c => c+1);
     goNext();
   }
 
-  function handleUseHint(puzzleIdx, hintIdx) {
+  function handleUseHint(puzzleIdx: number, hintIdx: number) {
     setPuzzleHints(h => { const n=[...h]; n[puzzleIdx]=hintIdx+1; return n; });
     setPenalty(p => p + PENALTY_SECS);
   }
@@ -1281,16 +1351,16 @@ export default function BrokenDeckGame() {
           <main className="bd-main">
             <div className={`bd-stage-wrap ${transitioning?"bd-glitch":""}`}>
               {step.type === "cutscene" && (
-                <DialogueCutscene key={step.key} sceneKey={step.key} onComplete={goNext}/>
+                <DialogueCutscene key={step.key} sceneKey={step.key as any} onComplete={goNext}/>
               )}
               {step.type === "puzzle" && (() => {
-                const Comp = PUZZLE_COMPONENTS[step.idx];
+                const Comp = PUZZLE_COMPONENTS[step.idx] as React.ComponentType<any>;
                 const pi = step.idx;
                 return (
                   <Comp key={pi} fragments={fragments}
                     onSolve={handleSolve}
                     hintUsed={puzzleHints[pi]}
-                    onUseHint={(hintIdx) => handleUseHint(pi, hintIdx)}
+                    onUseHint={(hintIdx: number) => handleUseHint(pi, hintIdx)}
                     penaltyTotal={puzzleHints[pi]*PENALTY_SECS}
                   />
                 );
