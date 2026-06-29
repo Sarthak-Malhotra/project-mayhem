@@ -29,6 +29,8 @@ export default function HuntPage() {
                 ? "/hunt/case-04"
                 : fileName === "Case-File-05"
                 ? "/hunt/case-05"
+                : fileName === "Case-File-06"
+                ? "/hunt/case-06"
                 : fileName === "Case-File-07"
                 ? "/hunt/case-07"
                 : fileName === "Case-File-08"
