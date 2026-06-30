@@ -4,6 +4,7 @@ import { getSession, saveDemoState } from '@/app/hunt/case-07/lib/session'
 import { isDbAvailable, db } from '@/db'
 import { puzzleEvents } from '@/db/schema'
 import { timelines } from '@/app/hunt/case-07/lib/timelines'
+import { verifyCsrf } from '@/app/hunt/case-07/lib/rateLimit'
 
 const allowedPuzzles = new Set([
   'quarantine-registration',
@@ -20,6 +21,11 @@ function digest(value: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. CSRF validation
+    if (!verifyCsrf(request)) {
+      return NextResponse.json({ correct: false, message: 'CSRF validation failed.' }, { status: 403 })
+    }
+
     const session = await getSession()
     if (!session) {
       return NextResponse.json({ correct: false, message: 'Unauthenticated.' }, { status: 401 })

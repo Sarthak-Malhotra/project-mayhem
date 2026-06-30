@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Project Mayhem",
+  title: "Cascade",
   description: "Decipher anomalies, restore timeline stability.",
 };
 

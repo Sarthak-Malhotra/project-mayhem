@@ -1,6 +1,7 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
+import { markCaseCompleted } from "@/components/case-progress";
 import { useCaseStore } from "../CaseFileProvider";
 import { puzzlesConfig } from "../lib/puzzles.config";
 import { PuzzleShell } from "./PuzzleShell";
@@ -12,6 +13,18 @@ export function PuzzleHub() {
   const scores = useCaseStore((state) => state.scores);
   const setActive = useCaseStore((state) => state.setActive);
   const totalScore = useCaseStore((state) => state.totalScore);
+
+  const allSolved = solved.length === 8;
+
+  useEffect(() => {
+    if (allSolved) {
+      markCaseCompleted("05");
+      const timer = setTimeout(() => {
+        window.location.href = '/hunt';
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [allSolved]);
 
   // Find active puzzle config if one is selected
   const activeConfig = puzzlesConfig.find((p) => p.id === activePuzzle);
@@ -26,6 +39,33 @@ export function PuzzleHub() {
       >
         <ActiveComponent />
       </PuzzleShell>
+    );
+  }
+
+  if (allSolved) {
+    return (
+      <div className="space-y-8 select-none font-mono text-zinc-100 flex flex-col items-center justify-center py-16 text-center relative z-20">
+        <div className="w-16 h-16 rounded-full bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4 animate-pulse">
+          <Trophy size={32} />
+        </div>
+        <h2 className="text-2xl font-bold tracking-widest text-emerald-400 font-serif uppercase">
+          Timeline Fully Stabilized
+        </h2>
+        <p className="text-sm text-zinc-400 max-w-md leading-relaxed">
+          All eight space-time anomalies have been sealed and chronological flow has been restored to the core.
+        </p>
+        <div className="flex flex-col items-center gap-2 mt-6">
+          <button
+            onClick={() => { markCaseCompleted("05"); window.location.href = '/hunt'; }}
+            className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-black font-mono text-xs font-bold uppercase tracking-wider rounded-lg border border-emerald-500 transition-all cursor-pointer shadow-[0_0_15px_rgba(16,185,129,0.3)]"
+          >
+            ◈ Return to Hub
+          </button>
+          <span className="text-[10px] text-zinc-500">
+            Redirecting automatically in 5 seconds...
+          </span>
+        </div>
+      </div>
     );
   }
 

@@ -9,6 +9,8 @@ import { DeadlightTransmissionEmail } from '@/app/hunt/case-07/emails/case-07'
 import { render } from '@react-email/components'
 import React from 'react'
 import { eq, and, gte } from 'drizzle-orm'
+import crypto from 'crypto'
+import { getClientIp, isRateLimited, verifyCsrf } from '@/app/hunt/case-07/lib/rateLimit'
 
 const registerSchema = z.object({
   name: z.string().trim().min(1, 'Name is required.'),
@@ -16,13 +18,31 @@ const registerSchema = z.object({
   sector: z.string().trim().min(1, 'Sector is required.'),
 })
 
-function sanitizeInput(val: string): string {
-  // Strip any script/HTML tags
-  return val.replace(/<[^>]*>/g, '').trim()
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 }
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. CSRF validation
+    if (!verifyCsrf(request)) {
+      return NextResponse.json({ success: false, message: 'CSRF validation failed.' }, { status: 403 })
+    }
+
+    // 2. IP-based rate limiting
+    const ip = getClientIp(request)
+    if (isRateLimited(ip, 5, 60 * 60 * 1000, 'transmissions-send')) {
+      return NextResponse.json(
+        { success: false, message: 'Too many requests. Please try again later.' },
+        { status: 429 }
+      )
+    }
+
     const body: unknown = await request.json().catch(() => null)
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ success: false, message: 'Invalid payload.' }, { status: 400 })
@@ -34,10 +54,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, message: errorMsg }, { status: 400 })
     }
 
-
-    const name = sanitizeInput(parsed.data.name)
-    const email = sanitizeInput(parsed.data.email)
-    const sector = sanitizeInput(parsed.data.sector)
+    // Sanitize and escape inputs to prevent HTML injection
+    const name = escapeHtml(parsed.data.name)
+    const email = escapeHtml(parsed.data.email)
+    const sector = escapeHtml(parsed.data.sector)
 
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
 
@@ -74,14 +94,14 @@ export async function POST(request: NextRequest) {
     // Set user session in cookies (log them in)
     const userId = await setSession(name, email)
 
-    // Generate unique recovery key
+    // Generate unique recovery key using CSPRNG
     let recoveryKey = ''
     let isUnique = false
     let attempts = 0
 
     while (!isUnique && attempts < 10) {
       attempts++
-      const randomCode = Math.floor(1000 + Math.random() * 9000).toString()
+      const randomCode = crypto.randomBytes(2).toString('hex').toUpperCase() // e.g. "A2EF"
       recoveryKey = `NULL-PLAGAS-${randomCode}`
 
       if (isDbAvailable) {
@@ -218,8 +238,6 @@ N=14 O=15 P=16 Q=17 R=18 S=19 T=20 U=21 V=22 W=23 X=24 Y=25 Z=26
 PROJECT NULL // SITE KENNEDY COMMAND HQ // 1996
 `
 
-
-
     // Deliver email
     const delivery = await sendClassifiedEmail({
       to: email,
@@ -256,7 +274,7 @@ PROJECT NULL // SITE KENNEDY COMMAND HQ // 1996
   } catch (error: any) {
     console.error('Transmission send API exception:', error)
     return NextResponse.json(
-      { success: false, message: error.message || 'Internal server error.' },
+      { success: false, message: 'Internal server error.' },
       { status: 500 }
     )
   }

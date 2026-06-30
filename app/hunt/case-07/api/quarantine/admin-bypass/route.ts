@@ -1,8 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createHash, timingSafeEqual } from 'node:crypto'
+import { getClientIp, isRateLimited, verifyCsrf } from '@/app/hunt/case-07/lib/rateLimit'
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. CSRF validation
+    if (!verifyCsrf(request)) {
+      return NextResponse.json({ valid: false, message: 'CSRF validation failed.' }, { status: 403 })
+    }
+
+    // 2. IP-based rate limiting (Max 5 attempts per 10 minutes)
+    const ip = getClientIp(request)
+    if (isRateLimited(ip, 5, 10 * 60 * 1000, 'admin-bypass')) {
+      return NextResponse.json(
+        { valid: false, message: 'Too many bypass attempts. Please try again later.' },
+        { status: 429 }
+      )
+    }
+
     const body: unknown = await request.json().catch(() => null)
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ valid: false, message: 'Invalid request.' }, { status: 400 })

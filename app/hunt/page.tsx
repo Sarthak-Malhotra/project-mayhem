@@ -1,48 +1,535 @@
+"use client";
+
+import { useEffect, useState, useRef } from "react";
 import Link from "next/link";
+import { isCaseCompleted } from "@/components/case-progress";
+import { Lock, X, Menu } from "lucide-react";
+import gsap from "gsap";
+
+const SYMBOL_DETAILS: Record<string, { title: string; desc: string }> = {
+  "01": {
+    title: "The Aether Glyph",
+    desc: "Recovered from the primary server breach. Its geometric lines align perfectly with archaic celestial mapping ciphers.",
+  },
+  "02": {
+    title: "The Ouroboros Node",
+    desc: "Extracted from the encrypted transmission logs. Represents infinite recursion, suggesting a self-replicating loop in the network core.",
+  },
+  "03": {
+    title: "The Chronos Gate",
+    desc: "Obtained from the metadata of the corrupted time-stamped files. A representation of temporal fragmentation.",
+  },
+  "04": {
+    title: "The Hecate Sigil",
+    desc: "Discovered within the deep web darknet handshake protocols. Points to three intersecting nodes in the darknet routing table.",
+  },
+  "05": {
+    title: "The Nemesis Prism",
+    desc: "Retrieved from the memory dump of the compromised firewall. Refracts incoming security scans into harmless noise.",
+  },
+  "06": {
+    title: "The Void Catalyst",
+    desc: "Found embedded in the binary structure of the zero-day exploit. Synthesizes empty space to absorb memory buffer overflows.",
+  },
+  "07": {
+    title: "The Aetherion Cipher",
+    desc: "Decoded from the final radio transmission. The primary key used to lock Operation Deadlight's communication array.",
+  },
+  "08": {
+    title: "The Singularity Core",
+    desc: "Acquired from the core reactor console before collapse. The ultimate symbol that binds all other network nodes together.",
+  },
+};
 
 export default function HuntPage() {
+  const [completedList, setCompletedList] = useState<Record<string, boolean>>({});
+  
+  // State for newly solved case symbol animation
+  const [solvedCaseForAnim, setSolvedCaseForAnim] = useState<string | null>(null);
+  const [showUnlockOverlay, setShowUnlockOverlay] = useState<boolean>(false);
+  const [animStep, setAnimStep] = useState<"intro" | "fly" | "done">("intro");
+  
+  // State for inventory dropdown open/close
+  const [isInventoryOpen, setIsInventoryOpen] = useState<boolean>(false);
+
+  // State for symbol details popup modal
+  const [selectedSymbolCase, setSelectedSymbolCase] = useState<string | null>(null);
+
+  const flyerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    // 1. Initial client-side check from local storage & cookies
+    const list: Record<string, boolean> = {};
+    const caseFilesNums = Array.from({ length: 9 }, (_, i) => String(i + 1).padStart(2, "0"));
+    caseFilesNums.forEach((num) => {
+      list[num] = isCaseCompleted(num);
+    });
+    setCompletedList(list);
+
+    // 2. Fetch latest from database API and sync
+    async function syncProgress() {
+      try {
+        const res = await fetch("/api/cases/progress");
+        const data = await res.json();
+        
+        // Redirect to login if not authenticated
+        if (data.success && !data.authenticated) {
+          window.location.href = '/';
+          return;
+        }
+
+        if (data.success && data.completedCases) {
+          const apiCompleted = data.completedCases as Record<string, boolean>;
+          let changed = false;
+          
+          for (const num of caseFilesNums) {
+            // A. If DB says it's completed but client doesn't know -> sync DB to client
+            if (apiCompleted[num] && !list[num]) {
+              list[num] = true;
+              localStorage.setItem(`case-${num}-completed`, "true");
+              document.cookie = `case-${num}-completed=true; path=/; max-age=31536000; SameSite=Lax`;
+              changed = true;
+            }
+            // B. If client says it's completed but DB doesn't know -> sync client to DB
+            else if (!apiCompleted[num] && list[num]) {
+              await fetch("/api/cases/progress", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ caseId: num }),
+              });
+            }
+          }
+          
+          if (changed) {
+            setCompletedList({ ...list });
+          }
+        }
+      } catch (err) {
+        console.error("Failed to sync case progress:", err);
+      }
+    }
+    syncProgress();
+  }, []);
+
+  // Triggered when completedList is populated: checks if a case was just solved in this tab session
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (Object.keys(completedList).length === 0) return;
+
+    const justSolved = sessionStorage.getItem("just-solved-case");
+    if (justSolved) {
+      const caseInt = parseInt(justSolved, 10);
+      if (caseInt >= 1 && caseInt <= 8) {
+        setSolvedCaseForAnim(justSolved);
+        setShowUnlockOverlay(true);
+        setAnimStep("intro");
+      }
+    }
+  }, [completedList]);
+
+  // GSAP animation for the unlock overlay intro
+  useEffect(() => {
+    if (!showUnlockOverlay || !solvedCaseForAnim || animStep !== "intro") return;
+
+    // Pulse and loop the background scanner line
+    gsap.fromTo(
+      ".overlay-scanner-line",
+      { top: "0%" },
+      { top: "100%", repeat: -1, yoyo: true, duration: 4, ease: "sine.inOut" }
+    );
+
+    // Initial scale and rotation bounce of center symbol
+    gsap.fromTo(
+      ".center-symbol-container",
+      { scale: 0, opacity: 0, rotation: -45 },
+      { scale: 1, opacity: 1, rotation: 0, duration: 1.2, ease: "elastic.out(1, 0.6)" }
+    );
+
+    // Fade in text blocks and decorative HUD texts
+    gsap.fromTo(
+      ".diagnostic-text",
+      { opacity: 0, y: 10 },
+      { opacity: 1, y: 0, duration: 0.5, stagger: 0.15, ease: "power2.out" }
+    );
+
+    gsap.fromTo(
+      ".text-block > *",
+      { opacity: 0, y: 20 },
+      { opacity: 1, y: 0, duration: 0.6, stagger: 0.2, ease: "power2.out", delay: 0.3 }
+    );
+  }, [showUnlockOverlay, solvedCaseForAnim, animStep]);
+
+  const handleStoreSymbol = () => {
+    if (!solvedCaseForAnim) return;
+
+    // Open inventory dropdown so target slot exists in the DOM and coordinates can be read
+    setIsInventoryOpen(true);
+
+    // Start flying step
+    setAnimStep("fly");
+
+    // Fade out overlay content quickly before flight begins
+    gsap.to(".text-block, .diagnostic-text, .overlay-scanner-line", {
+      opacity: 0,
+      duration: 0.3,
+      ease: "power2.out",
+    });
+
+    // Give DOM 150ms to render the inventory panel and target slot at its correct layout position
+    setTimeout(() => {
+      const centralEl = document.querySelector(".center-symbol-img");
+      const targetSlotEl = document.getElementById(`inventory-slot-${solvedCaseForAnim}`);
+
+      if (!centralEl || !targetSlotEl) {
+        // Fallback
+        sessionStorage.removeItem("just-solved-case");
+        setAnimStep("done");
+        setShowUnlockOverlay(false);
+        return;
+      }
+
+      const rectStart = centralEl.getBoundingClientRect();
+      const rectEnd = targetSlotEl.getBoundingClientRect();
+
+      // Configure starting geometry of the flyer to match the central symbol size/pos
+      if (flyerRef.current) {
+        gsap.set(flyerRef.current, {
+          x: rectStart.left,
+          y: rectStart.top,
+          width: rectStart.width,
+          height: rectStart.height,
+          opacity: 1,
+          scale: 1,
+        });
+
+        // Translate flyer to the target slot in the top-left inventory, scale down to fit
+        gsap.to(flyerRef.current, {
+          x: rectEnd.left,
+          y: rectEnd.top,
+          width: rectEnd.width,
+          height: rectEnd.height,
+          opacity: 0.8,
+          duration: 1.0,
+          ease: "power3.inOut",
+          onComplete: () => {
+            // Animate target slot pulse on arrival
+            gsap.fromTo(
+              targetSlotEl,
+              { scale: 1 },
+              { scale: 1.15, duration: 0.15, yoyo: true, repeat: 1, ease: "power2.out" }
+            );
+
+            // Trigger visual burst ring expanding from slot center
+            const burstEl = document.createElement("div");
+            burstEl.className = "absolute inset-0 rounded-xl border-2 border-cyan-400 pointer-events-none scale-100 opacity-100 z-10";
+            targetSlotEl.appendChild(burstEl);
+            
+            gsap.to(burstEl, {
+              scale: 1.8,
+              opacity: 0,
+              duration: 0.8,
+              ease: "power2.out",
+              onComplete: () => {
+                burstEl.remove();
+              }
+            });
+
+            // Cleanup overlay and flag
+            setAnimStep("done");
+            setShowUnlockOverlay(false);
+            sessionStorage.removeItem("just-solved-case");
+          }
+        });
+      }
+    }, 150);
+  };
+
   const caseFiles = Array.from({ length: 9 }, (_, i) => {
     const num = String(i + 1).padStart(2, "0");
     return `Case-File-${num}`;
   });
 
   return (
-    <main className="flex flex-col items-center min-h-screen w-full bg-black text-white pt-16 md:pt-24 px-6 pb-24">
-      <h1 className="font-serif text-2xl md:text-4xl tracking-[0.2em] text-zinc-100 uppercase select-none mb-12 md:mb-16">
+    <main 
+      className="flex flex-col items-center min-h-screen w-full text-white pt-16 md:pt-24 px-6 pb-24 relative overflow-hidden bg-cover bg-center bg-no-repeat"
+      style={{
+        backgroundImage: "url('/Hunt/Background-Image.png')",
+      }}
+    >
+      {/* Premium dark cinematic overlays */}
+      <div className="absolute inset-0 bg-black/50 pointer-events-none z-0" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.65)_100%)] pointer-events-none z-0" />
+
+      {/* Floating HUD Inventory Hamburger Trigger */}
+      <button 
+        onClick={() => setIsInventoryOpen(!isInventoryOpen)}
+        className="fixed top-4 left-4 sm:top-6 sm:left-6 z-35 flex items-center gap-2.5 px-4 py-2.5 bg-zinc-950/85 border border-zinc-800/80 hover:border-cyan-500/50 text-zinc-300 hover:text-cyan-400 rounded-xl cursor-pointer transition-all duration-300 shadow-md backdrop-blur-md font-mono text-[9px] sm:text-[10px] tracking-widest font-bold select-none group"
+      >
+        {isInventoryOpen ? <X size={15} /> : <Menu size={15} />}
+        <span>INVENTORY</span>
+        <span className="text-cyan-500 font-bold bg-cyan-950/30 px-1.5 py-0.5 border border-cyan-500/20 rounded-md">
+          {Object.keys(completedList).filter(k => parseInt(k, 10) <= 8 && completedList[k]).length}/8
+        </span>
+      </button>
+
+      {/* Dropdown Deciphered Archive Inventory (Top Left Corner) */}
+      {isInventoryOpen && (
+        <section 
+          id="inventory-section"
+          className="fixed top-16 left-4 sm:top-20 sm:left-6 z-30 bg-zinc-950/90 border border-zinc-800/80 rounded-2xl px-4 py-3 backdrop-blur-lg shadow-[0_12px_40px_rgba(0,0,0,0.85)] flex flex-col gap-2.5 w-[calc(100%-2rem)] sm:w-auto max-w-sm sm:max-w-md transition-all duration-300 animate-[fadeIn_0.3s_ease-out] origin-top-left"
+        >
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent to-cyan-500/[0.02] pointer-events-none rounded-2xl" />
+          
+          {/* Title and stats bar */}
+          <div className="flex items-center justify-between w-full border-b border-zinc-800/50 pb-1.5 text-[9px] tracking-widest font-mono text-zinc-400">
+            <span className="uppercase tracking-[0.2em] text-zinc-300 font-bold">
+              ARCHIVE RECORDS
+            </span>
+          </div>
+
+          {/* 8 slots row */}
+          <div className="flex items-center justify-start gap-1.5 sm:gap-2.5 w-full py-0.5 overflow-x-auto">
+            {Array.from({ length: 8 }, (_, i) => {
+              const num = String(i + 1).padStart(2, "0");
+              const isCompleted = completedList[num];
+              const isUnlocked = isCompleted && !(solvedCaseForAnim === num && animStep !== "done");
+
+              if (isUnlocked) {
+                return (
+                  <div
+                    key={num}
+                    id={`inventory-slot-${num}`}
+                    onClick={() => setSelectedSymbolCase(num)}
+                    className="relative w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 flex items-center justify-center border border-cyan-500/20 bg-cyan-950/10 hover:bg-cyan-950/20 rounded-xl transition-all duration-300 hover:border-cyan-400/50 hover:shadow-[0_0_15px_rgba(6,182,212,0.2)] hover:-translate-y-0.5 cursor-pointer group select-none flex-shrink-0"
+                  >
+                    <img
+                      src={`/Symbols/cf${i + 1}.png`}
+                      alt={`Case ${num} Symbol`}
+                      className="w-5 h-5 sm:w-7 sm:h-7 md:w-9 md:h-9 object-contain filter drop-shadow-[0_0_6px_rgba(6,182,212,0.4)]"
+                    />
+                    {/* Subtle hover tooltip */}
+                    <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-zinc-950 border border-zinc-800 text-[8px] tracking-wider text-cyan-400 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap font-mono z-40">
+                      CF-{num}
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div
+                  key={num}
+                  id={`inventory-slot-${num}`}
+                  className="relative w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 flex items-center justify-center border border-zinc-900/60 bg-zinc-950/40 rounded-xl text-zinc-700 select-none group flex-shrink-0"
+                >
+                  <Lock size={11} className="opacity-45" />
+                  <div className="absolute -bottom-8 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-zinc-950 border border-zinc-800 text-[8px] tracking-wider text-zinc-500 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap font-mono z-40">
+                    LOCKED
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      <h1 className="relative z-10 font-serif text-2xl md:text-4xl tracking-[0.2em] text-zinc-100 uppercase select-none mb-12 md:mb-16">
         Choose Case File
       </h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl w-full">
+      <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 max-w-5xl w-full">
         {caseFiles.map((fileName, index) => {
           const num = String(index + 1).padStart(2, "0");
+          const isCompleted = completedList[num];
+
+          if (isCompleted) {
+            return (
+              <div
+                key={index}
+                className="flex flex-col items-center justify-center h-36 md:h-44 bg-zinc-950/20 border border-emerald-950/40 rounded-xl p-6 relative overflow-hidden select-none cursor-not-allowed group"
+              >
+                {/* Muted green matrix overlay */}
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-emerald-500/[0.01]" />
+                
+                <span className="font-mono text-xs md:text-sm tracking-[0.25em] text-emerald-500/25 uppercase line-through transition-colors duration-300">
+                  {fileName}
+                </span>
+                
+                <div className="absolute bottom-3 right-4 font-mono text-[9px] tracking-[0.2em] text-emerald-500/60 bg-emerald-950/20 px-2 py-0.5 border border-emerald-500/20 rounded">
+                  SECURED
+                </div>
+              </div>
+            );
+          }
+
           return (
-          <Link
-            key={index}
-            href={
-              fileName === "Case-File-01"
-                ? "/hunt/case-01"
-                : fileName === "Case-File-02"
-                ? "/hunt/case-02"
-                : fileName === "Case-File-03"
-                ? "/hunt/case-03"
-                : fileName === "Case-File-05"
-                ? "/hunt/case-05"
-                : fileName === "Case-File-07"
-                ? "/hunt/case-07"
-                : "#"
-            }
-            className="flex items-center justify-center h-36 md:h-44 bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-6 cursor-pointer transition-all duration-300 hover:border-cyan-500/40 hover:shadow-[0_0_30px_rgba(6,182,212,0.12)] hover:-translate-y-1 group relative overflow-hidden"
-          >
-            {/* Subtle glow border effect on hover */}
-            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-cyan-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-            
-            <span className="font-mono text-xs md:text-sm tracking-[0.25em] text-zinc-400 group-hover:text-cyan-400 transition-colors uppercase duration-300">
-              {fileName}
-            </span>
-          </Link>
+            <Link
+              key={index}
+              href={
+                fileName === "Case-File-01"
+                  ? "/hunt/case-01"
+                  : fileName === "Case-File-02"
+                  ? "/hunt/case-02"
+                  : fileName === "Case-File-03"
+                  ? "/hunt/case-03"
+                  : fileName === "Case-File-04"
+                  ? "/hunt/case-04"
+                  : fileName === "Case-File-05"
+                  ? "/hunt/case-05"
+                  : fileName === "Case-File-06"
+                  ? "/hunt/case-06"
+                  : fileName === "Case-File-07"
+                  ? "/hunt/case-07"
+                  : fileName === "Case-File-08"
+                  ? "/hunt/case-08"
+                  : "#"
+              }
+              className="flex items-center justify-center h-36 md:h-44 bg-zinc-950/60 border border-zinc-800/80 rounded-xl p-6 cursor-pointer transition-all duration-300 hover:border-cyan-500/40 hover:shadow-[0_0_30px_rgba(6,182,212,0.12)] hover:-translate-y-1 group relative overflow-hidden"
+            >
+              {/* Subtle glow border effect on hover */}
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-cyan-500/[0.02] opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+              
+              <span className="font-mono text-xs md:text-sm tracking-[0.25em] text-zinc-400 group-hover:text-cyan-400 transition-colors uppercase duration-300">
+                {fileName}
+              </span>
+            </Link>
           );
         })}
       </div>
+
+      {/* Cinematic Symbol Unlock Overlay */}
+      {showUnlockOverlay && solvedCaseForAnim && (
+        <div 
+          className="fixed inset-0 z-45 flex flex-col items-center justify-center bg-cover bg-center bg-no-repeat overflow-hidden select-none animate-[fadeIn_0.5s_ease-out]"
+          style={{
+            backgroundImage: "url('/Hunt/Background-Image.png')",
+          }}
+        >
+          {/* Premium dark cinematic overlays */}
+          <div className="absolute inset-0 bg-black/55 pointer-events-none z-0" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,transparent_0%,rgba(0,0,0,0.7)_100%)] pointer-events-none z-0" />
+
+          {/* Animated Background Scanner Line */}
+          <div className="absolute top-0 left-0 w-full h-[2px] bg-cyan-500/30 shadow-[0_0_15px_rgba(6,182,212,0.5)] pointer-events-none overlay-scanner-line z-0" />
+          
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(6,182,212,0.08)_0%,transparent_70%)] pointer-events-none z-0" />
+
+          {/* Diagnostic Overlay Texts */}
+          <div className="absolute top-8 left-8 font-mono text-[10px] tracking-[0.25em] text-zinc-500 hidden md:block">
+            <p className="diagnostic-text">SYS.LOC: /HUNT/DECRYPT</p>
+            <p className="diagnostic-text">STABILITY_INDEX: 99.4%</p>
+          </div>
+          <div className="absolute top-8 right-8 font-mono text-[10px] tracking-[0.25em] text-cyan-500/60 hidden md:block">
+            <p className="diagnostic-text">STATUS: DECRYPTION_SUCCESS</p>
+          </div>
+
+          <div className="relative flex flex-col items-center max-w-lg px-6 text-center">
+            {/* Hologram Rings */}
+            <div className="absolute -inset-10 flex items-center justify-center pointer-events-none opacity-20 z-0">
+              <svg className="w-72 h-72 animate-[spin_40s_linear_infinite]" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="45" fill="none" stroke="#06b6d4" strokeWidth="0.5" strokeDasharray="5, 3" />
+                <circle cx="50" cy="50" r="40" fill="none" stroke="#06b6d4" strokeWidth="0.25" />
+              </svg>
+              <svg className="absolute w-80 h-80 animate-[spin_20s_linear_infinite_reverse]" viewBox="0 0 100 100">
+                <circle cx="50" cy="50" r="48" fill="none" stroke="#06b6d4" strokeWidth="0.5" strokeDasharray="15, 8" />
+              </svg>
+            </div>
+
+            {/* Central Symbol */}
+            <div className="relative w-44 h-44 md:w-52 md:h-52 z-10 flex items-center justify-center bg-cyan-950/10 border border-cyan-500/20 rounded-2xl backdrop-blur-sm p-6 shadow-[0_0_50px_rgba(6,182,212,0.1)] center-symbol-container overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-b from-transparent to-cyan-500/[0.05]" />
+              <img
+                src={`/Symbols/cf${parseInt(solvedCaseForAnim, 10)}.png`}
+                alt="Recovered Symbol"
+                className="w-full h-full object-contain filter drop-shadow-[0_0_15px_rgba(6,182,212,0.6)] center-symbol-img"
+              />
+            </div>
+
+            {/* Title & Info */}
+            <div className="mt-8 z-10 text-block">
+              <h2 className="font-mono text-xs md:text-sm tracking-[0.3em] text-cyan-400 uppercase mb-2">
+                ◈ CASE FILE {solvedCaseForAnim} SECURED ◈
+              </h2>
+              <h3 className="font-serif text-2xl md:text-3xl text-zinc-100 tracking-wider mb-4">
+                {SYMBOL_DETAILS[solvedCaseForAnim]?.title}
+              </h3>
+              <p className="font-mono text-[11px] md:text-xs text-zinc-400 tracking-wide leading-relaxed max-w-sm mb-8">
+                {SYMBOL_DETAILS[solvedCaseForAnim]?.desc}
+              </p>
+
+              <button
+                onClick={handleStoreSymbol}
+                disabled={animStep === "fly"}
+                className="px-8 py-3 bg-cyan-950/40 hover:bg-cyan-500/20 text-cyan-400 font-mono text-xs tracking-[0.2em] uppercase border border-cyan-500/30 rounded-lg hover:shadow-[0_0_20px_rgba(6,182,212,0.3)] transition-all duration-300 cursor-pointer disabled:opacity-50"
+              >
+                {animStep === "fly" ? "Recording..." : "Record in Archive"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Symbol Detail Inspection Modal */}
+      {selectedSymbolCase && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4 select-none animate-[fadeIn_0.3s_ease-out]">
+          <div className="relative max-w-md w-full border border-cyan-500/30 bg-zinc-950/90 rounded-2xl p-6 md:p-8 shadow-[0_0_50px_rgba(6,182,212,0.2)] overflow-hidden animate-[scaleUp_0.3s_ease-out]">
+            <div className="absolute inset-0 bg-gradient-to-b from-transparent to-cyan-500/[0.02] pointer-events-none" />
+            
+            <button
+              onClick={() => setSelectedSymbolCase(null)}
+              className="absolute top-4 right-4 text-zinc-500 hover:text-white p-1 transition-colors duration-200 cursor-pointer"
+            >
+              <X size={18} />
+            </button>
+            
+            <div className="flex flex-col items-center text-center">
+              <div className="w-36 h-36 flex items-center justify-center bg-cyan-950/10 border border-cyan-500/10 rounded-xl p-4 mb-6 shadow-inner relative">
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-cyan-500/[0.04]" />
+                <img
+                  src={`/Symbols/cf${parseInt(selectedSymbolCase, 10)}.png`}
+                  alt={`Case ${selectedSymbolCase} Symbol`}
+                  className="w-full h-full object-contain filter drop-shadow-[0_0_10px_rgba(6,182,212,0.4)]"
+                />
+              </div>
+              
+              <span className="font-mono text-[10px] tracking-[0.25em] text-cyan-500 uppercase mb-2">
+                ◈ RECOVERED SYMBOL 0{parseInt(selectedSymbolCase, 10)} ◈
+              </span>
+              
+              <h3 className="font-serif text-xl md:text-2xl text-zinc-100 tracking-wider mb-4">
+                {SYMBOL_DETAILS[selectedSymbolCase]?.title}
+              </h3>
+              
+              <p className="font-mono text-xs text-zinc-400 tracking-wide leading-relaxed mb-6">
+                {SYMBOL_DETAILS[selectedSymbolCase]?.desc}
+              </p>
+              
+              <div className="font-mono text-[9px] tracking-[0.15em] text-zinc-500 border border-zinc-800/80 px-3 py-1 rounded bg-zinc-950/40">
+                CASE-{selectedSymbolCase} SECURED // INT.SYS.RECORD
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Flying Symbol Animation Canvas */}
+      {animStep === "fly" && solvedCaseForAnim && (
+        <div
+          ref={flyerRef}
+          className="fixed pointer-events-none z-50 rounded-xl border border-cyan-500/50 bg-zinc-950/80 backdrop-blur-md flex items-center justify-center p-3 shadow-[0_0_30px_rgba(6,182,212,0.4)]"
+          style={{
+            width: "180px",
+            height: "180px",
+            left: 0,
+            top: 0,
+          }}
+        >
+          <img
+            src={`/Symbols/cf${parseInt(solvedCaseForAnim, 10)}.png`}
+            alt="Flying Symbol"
+            className="w-full h-full object-contain filter drop-shadow-[0_0_10px_rgba(6,182,212,0.5)]"
+          />
+        </div>
+      )}
     </main>
   );
 }

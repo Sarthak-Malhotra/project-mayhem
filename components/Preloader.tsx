@@ -263,7 +263,7 @@ export default function Preloader() {
           className="cryptic-title text-white font-serif text-3xl md:text-5xl lg:text-6xl font-black uppercase tracking-[0.8em] select-none flex items-center justify-center whitespace-nowrap mb-6"
           style={{ opacity: 0, visibility: "hidden" }}
         >
-          {splitText("PROJECT MAYHEM", "cryptic-char")}
+          {splitText("CASCADE", "cryptic-char")}
         </h1>
 
         {/* Headphone Advice */}

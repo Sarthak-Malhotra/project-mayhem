@@ -13,6 +13,8 @@ import { Act7Memory } from './acts/Act7Memory'
 import { Act8FinalTransmission } from './acts/Act8FinalTransmission'
 import { EchoGuide } from '@/components/case-07/shared/EchoGuide'
 import { useActProgress } from './hooks/useActProgress'
+import { markCaseCompleted } from '@/components/case-progress'
+import CaseGuard from '@/components/CaseGuard'
 import styles from './operation-deadlight.module.css'
 
 export default function OperationDeadlightPage() {
@@ -24,11 +26,7 @@ export default function OperationDeadlightPage() {
         const res = await fetch('/hunt/case-07/api/progress')
         const data = await res.json()
         if (!data.authenticated) {
-          await fetch('/hunt/case-07/api/auth/session', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ name: 'Demo Agent', email: 'agent@aetherion.org' }),
-          })
+          window.location.href = '/';
         }
       } catch (err) {
         console.error('Session initialization failed:', err)
@@ -36,6 +34,13 @@ export default function OperationDeadlightPage() {
     }
     initSession()
   }, [])
+
+  // Sync completion with main progress database/cookies
+  useEffect(() => {
+    if (hydrated && isComplete('act-8')) {
+      markCaseCompleted('07')
+    }
+  }, [hydrated, isComplete])
 
   useEffect(() => {
     if (typeof window === 'undefined' || !hydrated) return
@@ -84,68 +89,70 @@ export default function OperationDeadlightPage() {
 
   if (!hydrated) {
     return (
-      <main data-timeline="operation-deadlight" className={styles.timeline}>
-        <Act1Archive />
-        <EchoGuide character="crow" actProgress={0} />
-      </main>
+      <CaseGuard caseId="07">
+        <main data-timeline="operation-deadlight" className={styles.timeline}>
+          <Act1Archive />
+          <EchoGuide character="crow" actProgress={0} />
+        </main>
+      </CaseGuard>
     )
   }
 
   return (
-    <main data-timeline="operation-deadlight" className={styles.timeline}>
-      {/* Act 1: Always accessible — no puzzle gate */}
-      <Act1Archive />
+    <CaseGuard caseId="07">
+      <main data-timeline="operation-deadlight" className={styles.timeline}>
+        {/* Act 1: Always accessible — no puzzle gate */}
+        <Act1Archive />
 
-      {/* Act 2: Unlocked by default (Act 1 is narrative only) */}
-      <Act2Quarantine
-        onPuzzleSolved={() => markComplete('act-2')}
-      />
-
-      {/* Act 3: Locked until Act 2 registration puzzle solved */}
-      {(isComplete('act-2') || devUnlockAll) && (
-        <Act3Infection
-          onPuzzleSolved={() => markComplete('act-3')}
+        {/* Act 2: Unlocked by default (Act 1 is narrative only) */}
+        <Act2Quarantine
+          onPuzzleSolved={() => markComplete('act-2')}
         />
-      )}
 
-      {/* Act 4: Locked until Act 3 behavioral match solved */}
-      {(isComplete('act-3') || devUnlockAll) && (
-        <Act4Silence
-          onPuzzleSolved={() => markComplete('act-4')}
-        />
-      )}
+        {/* Act 3: Locked until Act 2 registration puzzle solved */}
+        {(isComplete('act-2') || devUnlockAll) && (
+          <Act3Infection
+            onPuzzleSolved={() => markComplete('act-3')}
+          />
+        )}
 
-      {/* Act 5: Locked until Act 4 alert elimination completed */}
-      {(isComplete('act-4') || devUnlockAll) && (
-        <Act5BlackSymbol
-          onPuzzleSolved={() => markComplete('act-5')}
-        />
-      )}
+        {/* Act 4: Locked until Act 3 behavioral match solved */}
+        {(isComplete('act-3') || devUnlockAll) && (
+          <Act4Silence
+            onPuzzleSolved={() => markComplete('act-4')}
+          />
+        )}
 
-      {/* Act 6: Locked until Act 5 symbol reconstruction solved */}
-      {(isComplete('act-5') || devUnlockAll) && (
-        <Act6Identity
-          onPuzzleSolved={() => markComplete('act-6')}
-        />
-      )}
+        {/* Act 5: Locked until Act 4 alert elimination completed */}
+        {(isComplete('act-4') || devUnlockAll) && (
+          <Act5BlackSymbol
+            onPuzzleSolved={() => markComplete('act-5')}
+          />
+        )}
 
-      {/* Act 7: Locked until Act 6 identity distortion solved */}
-      {(isComplete('act-6') || devUnlockAll) && (
-        <Act7Memory
-          onPuzzleSolved={() => markComplete('act-7')}
-        />
-      )}
+        {/* Act 6: Locked until Act 5 symbol reconstruction solved */}
+        {(isComplete('act-5') || devUnlockAll) && (
+          <Act6Identity
+            onPuzzleSolved={() => markComplete('act-6')}
+          />
+        )}
 
-      {/* Act 8: Locked until Act 7 memory corruption solved */}
-      {(isComplete('act-7') || devUnlockAll) && (
-        <Act8FinalTransmission
-          onPuzzleSolved={() => markComplete('act-8')}
-        />
-      )}
+        {/* Act 7: Locked until Act 6 identity distortion solved */}
+        {(isComplete('act-6') || devUnlockAll) && (
+          <Act7Memory
+            onPuzzleSolved={() => markComplete('act-7')}
+          />
+        )}
 
-      <EchoGuide character="crow" actProgress={actProgress} />
-    </main>
+        {/* Act 8: Locked until Act 7 memory corruption solved */}
+        {(isComplete('act-7') || devUnlockAll) && (
+          <Act8FinalTransmission
+            onPuzzleSolved={() => markComplete('act-8')}
+          />
+        )}
+
+        <EchoGuide character="crow" actProgress={actProgress} />
+      </main>
+    </CaseGuard>
   )
 }
-
-

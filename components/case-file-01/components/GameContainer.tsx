@@ -3,6 +3,7 @@ import '../styles.css';
 
 
 import { useState, useEffect } from 'react';
+import { markCaseCompleted } from '@/components/case-progress';
 import { useGameEngine } from '../hooks/useGameEngine';
 import { FirstPersonView } from './FirstPersonView';
 import { Minimap } from './Minimap';
@@ -28,6 +29,16 @@ export default function GameContainer() {
       delete (window as any).map;
     };
   }, []);
+
+  useEffect(() => {
+    if (gameWon) {
+      markCaseCompleted("01");
+      const timer = setTimeout(() => {
+        window.location.href = '/hunt';
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [gameWon]);
 
   const solvedCount = Object.values(anomalies).filter(a => a.solved).length;
   const totalAnomalies = Object.keys(anomalies).length;
@@ -81,6 +92,27 @@ export default function GameContainer() {
             PRISON SEALED
           </h1>
           <p className="win-subtext">The future remains unborn.</p>
+          <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+            <button 
+              onClick={() => { markCaseCompleted("01"); window.location.href = '/hunt'; }}
+              className="basic-btn"
+              style={{
+                padding: '0.75rem 2rem',
+                fontSize: '1rem',
+                border: '1px solid var(--color-danger)',
+                color: 'var(--color-danger)',
+                background: 'rgba(0, 0, 0, 0.5)',
+                cursor: 'pointer',
+                letterSpacing: '2px',
+                textTransform: 'uppercase'
+              }}
+            >
+              Return to Hub
+            </button>
+            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
+              Redirecting automatically in 5 seconds...
+            </span>
+          </div>
         </div>
       )}
     </div>

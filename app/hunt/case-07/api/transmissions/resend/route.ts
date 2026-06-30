@@ -7,9 +7,25 @@ import { DeadlightTransmissionEmail } from '@/app/hunt/case-07/emails/case-07'
 import { render } from '@react-email/components'
 import React from 'react'
 import { eq, desc } from 'drizzle-orm'
+import { getSession } from '@/app/hunt/case-07/lib/session'
+import { getClientIp, isRateLimited, verifyCsrf } from '@/app/hunt/case-07/lib/rateLimit'
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. CSRF validation
+    if (!verifyCsrf(request)) {
+      return NextResponse.json({ success: false, message: 'CSRF validation failed.' }, { status: 403 })
+    }
+
+    // 2. IP-based rate limiting (Max 3 resends per hour)
+    const ip = getClientIp(request)
+    if (isRateLimited(ip, 3, 60 * 60 * 1000, 'transmissions-resend')) {
+      return NextResponse.json(
+        { success: false, message: 'Too many resend attempts. Please try again later.' },
+        { status: 429 }
+      )
+    }
+
     const body: unknown = await request.json().catch(() => null)
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ success: false, message: 'Invalid payload.' }, { status: 400 })
@@ -21,6 +37,15 @@ export async function POST(request: NextRequest) {
     }
 
     const cleanedEmail = email.trim().toLowerCase()
+
+    // 3. Authenticate and enforce session-to-email ownership
+    const session = await getSession()
+    if (!session || session.email !== cleanedEmail) {
+      return NextResponse.json(
+        { success: false, message: 'Unauthorized. Active session does not match requested email.' },
+        { status: 401 }
+      )
+    }
 
     let record: any = null
 
@@ -142,7 +167,6 @@ N=14 O=15 P=16 Q=17 R=18 S=19 T=20 U=21 V=22 W=23 X=24 Y=25 Z=26
 PROJECT NULL // SITE KENNEDY COMMAND HQ // 1996
 `
 
-
     // Re-deliver email
     const delivery = await sendClassifiedEmail({
       to: record.email,
@@ -176,7 +200,7 @@ PROJECT NULL // SITE KENNEDY COMMAND HQ // 1996
 
     if (!delivery.success) {
       return NextResponse.json(
-        { success: false, message: `Resend failed: ${delivery.error || 'delivery error'}` },
+        { success: false, message: 'Resend failed.' },
         { status: 500 }
       )
     }
@@ -185,7 +209,7 @@ PROJECT NULL // SITE KENNEDY COMMAND HQ // 1996
   } catch (error: any) {
     console.error('Transmission resend API exception:', error)
     return NextResponse.json(
-      { success: false, message: error.message || 'Internal server error.' },
+      { success: false, message: 'Internal server error.' },
       { status: 500 }
     )
   }

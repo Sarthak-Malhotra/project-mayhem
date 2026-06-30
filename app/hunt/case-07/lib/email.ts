@@ -93,6 +93,11 @@ export async function sendEmail({ to, subject, text, html }: EmailOptions): Prom
 
   // 3. Fallback/Local Log Method (Offline / Dev environment)
   try {
+    const isProd = process.env.NODE_ENV === 'production'
+    if (isProd) {
+      console.log(`\n[LOCAL EMAIL SIMULATOR] Simulated email to ${to} (logging to disk disabled in production)`)
+      return { success: true, method: 'local_log' }
+    }
     const logDir = path.join(process.cwd(), 'artifacts')
     if (!fs.existsSync(logDir)) {
       fs.mkdirSync(logDir, { recursive: true })

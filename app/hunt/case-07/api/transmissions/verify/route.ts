@@ -3,9 +3,24 @@ import { isDbAvailable, db } from '@/db'
 import { emailTransmissions } from '@/db/schema'
 import { mockTransmissions } from '@/app/hunt/case-07/lib/mockDb'
 import { eq } from 'drizzle-orm'
+import { getClientIp, isRateLimited, verifyCsrf } from '@/app/hunt/case-07/lib/rateLimit'
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. CSRF validation
+    if (!verifyCsrf(request)) {
+      return NextResponse.json({ success: false, message: 'CSRF validation failed.' }, { status: 403 })
+    }
+
+    // 2. IP-based rate limiting (Max 5 attempts per 10 minutes)
+    const ip = getClientIp(request)
+    if (isRateLimited(ip, 5, 10 * 60 * 1000, 'transmissions-verify')) {
+      return NextResponse.json(
+        { success: false, message: 'Too many verification attempts. Please try again later.' },
+        { status: 429 }
+      )
+    }
+
     const body: unknown = await request.json().catch(() => null)
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ success: false, message: 'Invalid payload.' }, { status: 400 })
@@ -61,7 +76,7 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error('Verify API error:', error)
     return NextResponse.json(
-      { success: false, message: error.message || 'Internal server error.' },
+      { success: false, message: 'Internal server error.' },
       { status: 500 }
     )
   }

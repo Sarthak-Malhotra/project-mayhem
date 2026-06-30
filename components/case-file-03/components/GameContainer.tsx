@@ -2,6 +2,7 @@
 import '../styles.css';
 
 import { useState, useEffect } from 'react';
+import { markCaseCompleted } from '@/components/case-progress';
 import dynamic from 'next/dynamic';
 import { useAudio } from '@/components/AudioProvider';
 import { useGameEngine } from '../hooks/useGameEngine';
@@ -23,7 +24,7 @@ export default function GameContainer() {
     showStory, finishStory
   } = useGameEngine();
 
-  const [showMap, setShowMap] = useState<boolean>(false);
+  const [showMap, setShowMap] = useState<boolean>(true);
 
   useEffect(() => {
     changeBGM('/cathedral.wav');
@@ -41,6 +42,16 @@ export default function GameContainer() {
       delete (window as any).map;
     };
   }, []);
+
+  useEffect(() => {
+    if (gameWon) {
+      markCaseCompleted("03");
+      const timer = setTimeout(() => {
+        window.location.href = '/hunt';
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [gameWon]);
 
   const solvedCount = Object.values(anomalies).filter(a => a.solved).length;
   const totalAnomalies = Object.keys(anomalies).length;
@@ -118,6 +129,27 @@ export default function GameContainer() {
             FLAME STOKED
           </h1>
           <p className="win-subtext">The fire grows warm. The timeline has stabilized.</p>
+          <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
+            <button 
+              onClick={() => { markCaseCompleted("03"); window.location.href = '/hunt'; }}
+              className="basic-btn"
+              style={{
+                padding: '0.75rem 2rem',
+                fontSize: '1rem',
+                border: '1px solid var(--color-accent)',
+                color: 'var(--color-accent)',
+                background: 'rgba(0, 0, 0, 0.5)',
+                cursor: 'pointer',
+                letterSpacing: '2px',
+                textTransform: 'uppercase'
+              }}
+            >
+              Return to Hub
+            </button>
+            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', fontFamily: 'monospace' }}>
+              Redirecting automatically in 5 seconds...
+            </span>
+          </div>
         </div>
       )}
     </div>

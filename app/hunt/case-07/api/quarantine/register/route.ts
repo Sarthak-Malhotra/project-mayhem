@@ -1,9 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { setSession } from '@/app/hunt/case-07/lib/session'
 import { sendEmail } from '@/app/hunt/case-07/lib/email'
+import { getClientIp, isRateLimited, verifyCsrf } from '@/app/hunt/case-07/lib/rateLimit'
+
+function escapeHtml(str: string): string {
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
 
 export async function POST(request: NextRequest) {
   try {
+    // 1. CSRF validation
+    if (!verifyCsrf(request)) {
+      return NextResponse.json({ success: false, message: 'CSRF validation failed.' }, { status: 403 })
+    }
+
+    // 2. IP-based rate limiting
+    const ip = getClientIp(request)
+    if (isRateLimited(ip, 10, 60 * 60 * 1000, 'quarantine-register')) {
+      return NextResponse.json(
+        { success: false, message: 'Too many registration attempts. Please try again later.' },
+        { status: 429 }
+      )
+    }
+
     const body: unknown = await request.json().catch(() => null)
     if (!body || typeof body !== 'object') {
       return NextResponse.json({ success: false, message: 'Invalid payload.' }, { status: 400 })
@@ -25,10 +49,14 @@ export async function POST(request: NextRequest) {
     const trimmedEmail = email.trim().toLowerCase()
     const trimmedSector = sector.trim()
 
-    // 1. Save user session (registers the user in the database or cookies)
+    // Escape inputs for use in HTML email templates
+    const escapedId = escapeHtml(trimmedId)
+    const escapedSector = escapeHtml(trimmedSector)
+
+    // Save user session (registers the user in the database or cookies)
     const userId = await setSession(trimmedId, trimmedEmail)
 
-    // 2. Prepare the themed email contents — multi-step data packet puzzle
+    // Prepare the themed email contents — multi-step data packet puzzle
     const emailSubject = `[PROJECT NULL] INTERCEPTED DATA PACKETS — SITE KENNEDY CLASSIFICATION REQUIRED`
     
     const emailText = `PROJECT NULL // INTERCEPTED DATA PACKETS // SITE KENNEDY
@@ -102,7 +130,7 @@ SITE Command HQ // 1996`
           &#9888; CLASSIFIED TRANSMISSION — SITE KENNEDY QUARANTINE
         </p>
         <p>
-          Recovery Agent <strong style="color: #fff;">${trimmedId}</strong> — Sector: <strong>${trimmedSector}</strong>
+          Recovery Agent <strong style="color: #fff;">${escapedId}</strong> — Sector: <strong>${escapedSector}</strong>
         </p>
         <p style="margin: 16px 0; line-height: 1.5;">
           6 encoded data packets were intercepted from the organism&apos;s neural network. Each packet uses a different encoding method and contains a single number.
@@ -180,8 +208,7 @@ SITE Command HQ // 1996`
       </div>
     `
 
-    // 3. Send email asynchronously to not block API response
-    // We await it here but catch errors inside sendEmail so it doesn't crash
+    // Send email asynchronously to not block API response
     const sendResult = await sendEmail({
       to: trimmedEmail,
       subject: emailSubject,

@@ -5,6 +5,7 @@ import { isDbAvailable, db } from '@/db'
 import { users, timelineProgress, puzzleEvents, fragments, leaderboard } from '@/db/schema'
 import { eq, and } from 'drizzle-orm'
 import { timelines } from './timelines'
+import crypto from 'crypto'
 
 export interface SessionData {
   userId: string
@@ -26,9 +27,36 @@ const DEFAULT_DEMO_STATE: SessionData = {
   wrongAttempts: {},
 }
 
+const SESSION_SECRET = process.env.SESSION_SECRET || 'a-very-secure-random-secret-for-cryptic-hunt-default'
+
+function signCookie(value: string): string {
+  const hmac = crypto.createHmac('sha256', SESSION_SECRET)
+  hmac.update(value)
+  const signature = hmac.digest('base64url')
+  return `${value}.${signature}`
+}
+
+function verifyCookie(cookieValue: string): string | null {
+  const parts = cookieValue.split('.')
+  if (parts.length !== 2) return null
+  const [value, signature] = parts
+  const expectedSignature = crypto.createHmac('sha256', SESSION_SECRET).update(value).digest('base64url')
+  
+  const sigBuffer = Buffer.from(signature)
+  const expectedBuffer = Buffer.from(expectedSignature)
+  if (sigBuffer.length !== expectedBuffer.length) {
+    return null
+  }
+  if (crypto.timingSafeEqual(sigBuffer, expectedBuffer)) {
+    return value
+  }
+  return null
+}
+
 export async function getSession(): Promise<SessionData | null> {
   const cookieStore = await cookies()
-  const sessionId = cookieStore.get('auth_session')?.value
+  const rawSessionId = cookieStore.get('auth_session')?.value
+  const sessionId = rawSessionId ? verifyCookie(rawSessionId) : null
   
   // Require auth cookie — do not auto-authenticate
   if (!sessionId) {
@@ -37,7 +65,8 @@ export async function getSession(): Promise<SessionData | null> {
 
   if (!isDbAvailable) {
     // Demo Mode: read state from cookie, or create a default session state
-    const demoStateRaw = cookieStore.get('aetherion_demo_state')?.value
+    const demoStateRawSigned = cookieStore.get('aetherion_demo_state')?.value
+    const demoStateRaw = demoStateRawSigned ? verifyCookie(demoStateRawSigned) : null
     if (demoStateRaw) {
       try {
         const parsed = JSON.parse(demoStateRaw) as SessionData
@@ -55,8 +84,8 @@ export async function getSession(): Promise<SessionData | null> {
     let user = userRows[0]
     
     if (!user) {
-      if (sessionId === 'default-agent-uuid') {
-        // Auto-create default user in database
+      if (sessionId === 'default-agent-uuid' && process.env.NODE_ENV === 'development') {
+        // Auto-create default user in database (dev only check)
         await db.insert(users).values({
           id: sessionId,
           name: 'Demo Agent',
@@ -139,7 +168,15 @@ export async function getSession(): Promise<SessionData | null> {
 
 export async function setSession(name: string, email: string): Promise<string> {
   const cookieStore = await cookies()
-  const newUserId = typeof crypto !== 'undefined' ? crypto.randomUUID() : `user-${Date.now()}`
+  const newUserId = crypto.randomUUID()
+  const isProd = process.env.NODE_ENV === 'production'
+  const cookieOptions = { 
+    maxAge: 60 * 60 * 24 * 7, 
+    path: '/', 
+    httpOnly: true, 
+    secure: isProd, 
+    sameSite: 'lax' as const 
+  }
 
   if (!isDbAvailable) {
     // Demo Mode: save dummy session and state cookies
@@ -149,8 +186,8 @@ export async function setSession(name: string, email: string): Promise<string> {
       name,
       email,
     }
-    cookieStore.set('auth_session', newUserId, { maxAge: 60 * 60 * 24 * 7, path: '/' })
-    cookieStore.set('aetherion_demo_state', JSON.stringify(newSessionState), { maxAge: 60 * 60 * 24 * 7, path: '/' })
+    cookieStore.set('auth_session', signCookie(newUserId), cookieOptions)
+    cookieStore.set('aetherion_demo_state', signCookie(JSON.stringify(newSessionState)), cookieOptions)
     return newUserId
   }
 
@@ -196,19 +233,27 @@ export async function setSession(name: string, email: string): Promise<string> {
       }
     }
 
-    cookieStore.set('auth_session', user.id, { maxAge: 60 * 60 * 24 * 7, path: '/' })
+    cookieStore.set('auth_session', signCookie(user.id), cookieOptions)
     return user.id
   } catch (error) {
     console.error('Database write error in setSession:', error)
     // Fall back to cookie session if DB write fails
-    cookieStore.set('auth_session', newUserId, { maxAge: 60 * 60 * 24 * 7, path: '/' })
+    cookieStore.set('auth_session', signCookie(newUserId), cookieOptions)
     return newUserId
   }
 }
 
 export async function saveDemoState(state: SessionData) {
   const cookieStore = await cookies()
-  cookieStore.set('aetherion_demo_state', JSON.stringify(state), { maxAge: 60 * 60 * 24 * 7, path: '/' })
+  const isProd = process.env.NODE_ENV === 'production'
+  const cookieOptions = { 
+    maxAge: 60 * 60 * 24 * 7, 
+    path: '/', 
+    httpOnly: true, 
+    secure: isProd, 
+    sameSite: 'lax' as const 
+  }
+  cookieStore.set('aetherion_demo_state', signCookie(JSON.stringify(state)), cookieOptions)
 }
 
 export async function clearSession() {
