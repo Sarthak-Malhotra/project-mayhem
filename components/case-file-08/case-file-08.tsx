@@ -1536,6 +1536,43 @@ export default function App() {
     return () => { if (ivRef.current) clearInterval(ivRef.current); };
   }, [timerOn]);
 
+  // Load DB progress on mount
+  useEffect(() => {
+    async function loadProgress() {
+      try {
+        const res = await fetch("/api/progress?caseId=08");
+        const data = await res.json();
+        if (data.success && data.progress?.case8State) {
+          const state = data.progress.case8State;
+          if (state.stage !== undefined) setStage(state.stage);
+          if (state.phase && state.phase !== "splash") {
+            setPhase(state.phase);
+            if (state.phase === "game") {
+              const currentStep = SEQ[state.stage ?? 0];
+              if (currentStep && currentStep.type === "puzzle") {
+                setTimerOn(true);
+              }
+            }
+          }
+          if (state.elapsed !== undefined) setElapsed(state.elapsed);
+        }
+      } catch (err) {
+        console.error("Failed to load Case 8 progress:", err);
+      }
+    }
+    loadProgress();
+  }, []);
+
+  // Save progress when phase or stage changes
+  useEffect(() => {
+    if (phase === "splash") return;
+    fetch("/api/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caseId: "08", key: "case8State", value: { phase, stage, elapsed } }),
+    }).catch((err) => console.error("Failed to save Case 8 progress:", err));
+  }, [phase, stage]);
+
   useEffect(() => {
     if (phase === "finale") {
       markCaseCompleted("08");

@@ -16,6 +16,7 @@ export function PuzzleHub() {
   const scores = useCaseStore((state) => state.scores);
   const setActive = useCaseStore((state) => state.setActive);
   const totalScore = useCaseStore((state) => state.totalScore);
+  const hydrated = useCaseStore((state) => state.hydrated);
 
   const allSolved = solved.length === 8;
 
@@ -27,30 +28,11 @@ export function PuzzleHub() {
   };
 
   // Archive recovery tracking (to prevent pops on page refreshes or hub re-loads)
-  const [seenArchives, setSeenArchives] = useState<number[]>([]);
-  const [isLoaded, setIsLoaded] = useState(false);
-
-  useEffect(() => {
-    const stored = localStorage.getItem("ch-case-05-seen-archives");
-    if (stored) {
-      try {
-        setSeenArchives(JSON.parse(stored));
-      } catch (e) {
-        console.error(e);
-      }
-    }
-    setIsLoaded(true);
-  }, []);
-
-  const markArchiveSeen = (id: number) => {
-    const nextSeen = [...seenArchives, id];
-    setSeenArchives(nextSeen);
-    localStorage.setItem("ch-case-05-seen-archives", JSON.stringify(nextSeen));
-  };
+  const seenArchives = useCaseStore((state) => state.seenArchives || []);
+  const markArchiveSeen = useCaseStore((state) => state.markArchiveSeen);
 
   // Check if any archive is completed but not seen yet
   const getPendingArchiveId = () => {
-    if (!isLoaded) return null;
     if (solved.includes(1) && solved.includes(2) && !seenArchives.includes(1)) return 1;
     if (solved.includes(3) && solved.includes(4) && !seenArchives.includes(2)) return 2;
     if (solved.includes(5) && solved.includes(6) && !seenArchives.includes(3)) return 3;
@@ -62,11 +44,11 @@ export function PuzzleHub() {
 
   // Auto-route to first unsolved puzzle when activePuzzle is null
   useEffect(() => {
-    if (isLoaded && introPlayed && activePuzzle === null && !allSolved && pendingArchiveId === null) {
+    if (hydrated && introPlayed && activePuzzle === null && !allSolved && pendingArchiveId === null) {
       const firstUnsolved = [1, 2, 3, 4, 5, 6, 7, 8].find(id => !solved.includes(id)) || 1;
       setActive(firstUnsolved);
     }
-  }, [isLoaded, introPlayed, activePuzzle, solved, allSolved, pendingArchiveId, setActive]);
+  }, [hydrated, introPlayed, activePuzzle, solved, allSolved, pendingArchiveId, setActive]);
 
   // Render sequence
   if (!introPlayed) {

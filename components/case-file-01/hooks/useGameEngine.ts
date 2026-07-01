@@ -173,14 +173,22 @@ export function useGameEngine() {
   const [gameWon, setGameWon] = useState<boolean>(false);
 
   useEffect(() => {
-    async function loadQuestions() {
+    async function loadQuestionsAndProgress() {
       try {
-        const res = await fetch("/api/questions?caseId=01");
-        const data = await res.json();
-        if (data.success && data.questions) {
+        const qRes = await fetch("/api/questions?caseId=01");
+        const qData = await qRes.json();
+        
+        const pRes = await fetch("/api/progress?caseId=01");
+        const pData = await pRes.json();
+        const solvedAnomalies = pData.success && Array.isArray(pData.progress?.solvedAnomalies) 
+          ? pData.progress.solvedAnomalies 
+          : [];
+
+        if (qData.success && qData.questions) {
           setAnomalies(prev => {
             const updated = { ...prev };
-            data.questions.forEach((q: { anomalyId: string; puzzleIndex: number; question: string; answer: string }) => {
+            
+            qData.questions.forEach((q: { anomalyId: string; puzzleIndex: number; question: string; answer: string }) => {
               if (updated[q.anomalyId] && updated[q.anomalyId].puzzles[q.puzzleIndex]) {
                 updated[q.anomalyId] = {
                   ...updated[q.anomalyId],
@@ -193,15 +201,52 @@ export function useGameEngine() {
                 };
               }
             });
+
+            solvedAnomalies.forEach((anomalyKey: string) => {
+              if (updated[anomalyKey]) {
+                updated[anomalyKey].solved = true;
+              }
+            });
+
             return updated;
           });
         }
+
+        if (pData.success) {
+          if (pData.progress?.player) {
+            setPlayer(pData.progress.player);
+          }
+          if (pData.progress?.levelIndex !== undefined) {
+            setLevelIndex(pData.progress.levelIndex);
+          }
+        }
       } catch (err) {
-        console.error("Failed to load DB questions for Case 1:", err);
+        console.error("Failed to load DB questions or progress for Case 1:", err);
       }
     }
-    loadQuestions();
+    loadQuestionsAndProgress();
   }, []);
+
+  // Save player position and level index with a 1-second debounce
+  useEffect(() => {
+    if (player.x === LEVELS[0].start.x && player.y === LEVELS[0].start.y && levelIndex === 0) return;
+
+    const handler = setTimeout(() => {
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId: "01", key: "player", value: player }),
+      }).catch((err) => console.error("Failed to save player position:", err));
+
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId: "01", key: "levelIndex", value: levelIndex }),
+      }).catch((err) => console.error("Failed to save level index:", err));
+    }, 1000);
+
+    return () => clearTimeout(handler);
+  }, [player, levelIndex]);
 
   const currentLevel = LEVELS[levelIndex];
   const allSolved = Object.values(anomalies).every(a => a.solved);
@@ -278,10 +323,22 @@ export function useGameEngine() {
   }, [movePlayer, turnPlayer, activeAnomaly, showStory, gameWon]);
 
   const solveAnomaly = (key: string) => {
-    setAnomalies(prev => ({
-      ...prev,
-      [key]: { ...prev[key], solved: true }
-    }));
+    setAnomalies(prev => {
+      const updated = {
+        ...prev,
+        [key]: { ...prev[key], solved: true }
+      };
+
+      const solvedIds = Object.keys(updated).filter(k => updated[k].solved);
+      
+      fetch('/api/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caseId: '01', key: 'solvedAnomalies', value: solvedIds })
+      }).catch(err => console.error('Failed to save Case 1 progress:', err));
+
+      return updated;
+    });
     setActiveAnomaly(null);
   };
 

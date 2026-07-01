@@ -1484,6 +1484,44 @@ export default function App() {
     return () => clearInterval(timerRef.current);
   }, [timerOn]);
 
+  useEffect(() => {
+    async function loadProgress() {
+      try {
+        const res = await fetch('/api/progress?caseId=02');
+        const data = await res.json();
+        if (data.success && data.progress?.case2State) {
+          const state = data.progress.case2State;
+          if (state.flowIdx !== undefined) setFlowIdx(state.flowIdx);
+          if (state.stage !== undefined) {
+            setStage(state.stage);
+            if (state.stage !== "title" && state.stage !== "scene" && state.stage !== "end") {
+              setTimerOn(true);
+            }
+          }
+          if (state.elapsed !== undefined) setElapsed(state.elapsed);
+          if (state.penalties !== undefined) setPenalties(state.penalties);
+          if (state.solvedCount !== undefined) setSolvedCount(state.solvedCount);
+        }
+      } catch (err) {
+        console.error('Failed to load Case 2 progress:', err);
+      }
+    }
+    loadProgress();
+  }, []);
+
+  useEffect(() => {
+    if (stage === "title") return;
+    fetch('/api/progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        caseId: '02',
+        key: 'case2State',
+        value: { stage, flowIdx, elapsed, penalties, solvedCount }
+      })
+    }).catch(err => console.error('Failed to save Case 2 progress:', err));
+  }, [stage, flowIdx]);
+
   const currentEntry = FLOW[flowIdx];
   const sceneNum = FLOW.slice(0, flowIdx+1).filter(f => f.type === "scene").length;
 

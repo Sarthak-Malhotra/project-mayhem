@@ -235,6 +235,12 @@ export default function CaseFile09() {
   const [isGlitching, setIsGlitching] = useState(false);
   const [currentTime, setCurrentTime] = useState("");
 
+  const [savedStage, setSavedStage] = useState<NarrativeStage>("INTRO");
+  const [isStage1Done, setIsStage1Done] = useState(false);
+  const [isStage2Done, setIsStage2Done] = useState(false);
+  const [isStage3Done, setIsStage3Done] = useState(false);
+  const [completed, setCompleted] = useState(false);
+
   // Sync digital clock in header
   useEffect(() => {
     const updateTime = () => {
@@ -246,11 +252,27 @@ export default function CaseFile09() {
     return () => clearInterval(interval);
   }, []);
 
-  // Hydrate stage on mount - always show the boot sequence typewriter first
+  // Hydrate stage on mount - load from DB first, then advance based on furthest unlocked
   useEffect(() => {
-    if (typeof window !== "undefined") {
+    async function loadProgressAndBoot() {
+      try {
+        const res = await fetch("/api/progress?caseId=09");
+        const data = await res.json();
+        if (data.success && data.progress?.case9State) {
+          const s = data.progress.case9State;
+          if (s.narrativeStage) setSavedStage(s.narrativeStage);
+          if (s.symbolReconstructed) setIsStage1Done(true);
+          if (s.quiz1Completed) setIsStage2Done(true);
+          if (s.stage2Completed) setIsStage3Done(true);
+          if (s.completed) setCompleted(true);
+        }
+      } catch (err) {
+        console.error("Failed to load Case 9 DB progress:", err);
+      }
       setStage("BOOT");
     }
+
+    loadProgressAndBoot();
   }, []);
 
   const steps = React.useMemo(() => {
@@ -258,46 +280,34 @@ export default function CaseFile09() {
     return getStepsForStage(stage);
   }, [stage]);
 
-  const getFurthestUnlockedStage = (): NarrativeStage => {
-    if (typeof window === "undefined") return "INTRO";
-    
-    const completed = localStorage.getItem("case-09-completed") === "true";
+  const getFurthestUnlockedStage = React.useCallback((): NarrativeStage => {
     if (completed) return "COMPLETION";
 
-    const saved = localStorage.getItem("case-09-narrative-stage") as NarrativeStage;
-    
-    const isStage3Done = localStorage.getItem("case-09-stage-2-completed") === "true";
-    const isStage2Done = localStorage.getItem("case-09-quiz-1-completed") === "true";
-    const isStage1Done = localStorage.getItem("case-09-symbol-reconstructed") === "true";
-
     // Prioritize furthest checkpoints
-    if (saved === "AUTHENTICATION" || saved === "FINAL_ARCHIVE" || saved === "FINAL_LOG" || saved === "QUIZ_3_SUCCESS") {
-      return saved;
+    if (savedStage === "AUTHENTICATION" || savedStage === "FINAL_ARCHIVE" || savedStage === "FINAL_LOG" || savedStage === "QUIZ_3_SUCCESS") {
+      return savedStage;
     }
     if (isStage3Done) {
       return "QUIZ_3";
     }
-    if (saved === "QUIZ_2_SUCCESS" || saved === "QUIZ_3_INTRO") {
-      return saved;
+    if (savedStage === "QUIZ_2_SUCCESS" || savedStage === "QUIZ_3_INTRO") {
+      return savedStage;
     }
     if (isStage2Done) {
       return "QUIZ_2";
     }
-    if (saved === "ARCHIVE_FRAGMENT_SUCCESS" || saved === "QUIZ_2_INTRO") {
-      return saved;
+    if (savedStage === "ARCHIVE_FRAGMENT_SUCCESS" || savedStage === "QUIZ_2_INTRO") {
+      return savedStage;
     }
     if (isStage1Done) {
       return "ARCHIVE_FRAGMENT";
     }
-    if (saved === "QUIZ_1_SUCCESS") {
-      return saved;
-    }
-    if (saved === "INTRO") {
-      return "INTRO";
+    if (savedStage === "QUIZ_1_SUCCESS") {
+      return savedStage;
     }
     
     return "INTRO";
-  };
+  }, [completed, savedStage, isStage3Done, isStage2Done, isStage1Done]);
 
   const isValidStage = (val: string): val is NarrativeStage => {
     return [
@@ -324,12 +334,26 @@ export default function CaseFile09() {
     setIsGlitching(true);
     setTimeout(() => {
       setStage(nextStage);
-      if (typeof window !== "undefined") {
-        localStorage.setItem("case-09-narrative-stage", nextStage);
-      }
+      setSavedStage(nextStage);
+      
+      // Update state and DB
+      const updatedState = {
+        narrativeStage: nextStage,
+        symbolReconstructed: isStage1Done || nextStage === "QUIZ_1_SUCCESS" || nextStage === "ARCHIVE_FRAGMENT" || nextStage === "ARCHIVE_FRAGMENT_SUCCESS" || nextStage === "QUIZ_2_INTRO" || nextStage === "QUIZ_2" || nextStage === "QUIZ_2_SUCCESS" || nextStage === "QUIZ_3_INTRO" || nextStage === "QUIZ_3" || nextStage === "QUIZ_3_SUCCESS" || nextStage === "AUTHENTICATION" || nextStage === "FINAL_ARCHIVE" || nextStage === "FINAL_LOG" || nextStage === "COMPLETION",
+        quiz1Completed: isStage2Done || nextStage === "ARCHIVE_FRAGMENT_SUCCESS" || nextStage === "QUIZ_2_INTRO" || nextStage === "QUIZ_2" || nextStage === "QUIZ_2_SUCCESS" || nextStage === "QUIZ_3_INTRO" || nextStage === "QUIZ_3" || nextStage === "QUIZ_3_SUCCESS" || nextStage === "AUTHENTICATION" || nextStage === "FINAL_ARCHIVE" || nextStage === "FINAL_LOG" || nextStage === "COMPLETION",
+        stage1Completed: isStage2Done || nextStage === "ARCHIVE_FRAGMENT_SUCCESS" || nextStage === "QUIZ_2_INTRO" || nextStage === "QUIZ_2" || nextStage === "QUIZ_2_SUCCESS" || nextStage === "QUIZ_3_INTRO" || nextStage === "QUIZ_3" || nextStage === "QUIZ_3_SUCCESS" || nextStage === "AUTHENTICATION" || nextStage === "FINAL_ARCHIVE" || nextStage === "FINAL_LOG" || nextStage === "COMPLETION",
+        stage2Completed: isStage3Done || nextStage === "QUIZ_2_SUCCESS" || nextStage === "QUIZ_3_INTRO" || nextStage === "QUIZ_3" || nextStage === "QUIZ_3_SUCCESS" || nextStage === "AUTHENTICATION" || nextStage === "FINAL_ARCHIVE" || nextStage === "FINAL_LOG" || nextStage === "COMPLETION",
+        completed: completed || nextStage === "COMPLETION",
+      };
+
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId: "09", key: "case9State", value: updatedState }),
+      }).catch((err) => console.error("Failed to save Case 9 progress:", err));
       setIsGlitching(false);
     }, 450);
-  }, []);
+  }, [isStage1Done, isStage2Done, isStage3Done, completed]);
 
   // Get current integrity status percentage
   const getIntegrityPercentage = (): number => {
@@ -394,28 +418,21 @@ export default function CaseFile09() {
       default:
         break;
     }
-  }, [stage]);
+  }, [stage, getFurthestUnlockedStage, advanceTo]);
 
   // Puzzle success triggers
   const handleQuiz1Solved = React.useCallback(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("case-09-symbol-reconstructed", "true");
-    }
+    setIsStage1Done(true);
     advanceTo("QUIZ_1_SUCCESS");
   }, [advanceTo]);
 
   const handleFragmentSolved = React.useCallback(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("case-09-quiz-1-completed", "true");
-      localStorage.setItem("case-09-stage-1-completed", "true");
-    }
+    setIsStage2Done(true);
     advanceTo("ARCHIVE_FRAGMENT_SUCCESS");
   }, [advanceTo]);
 
   const handleQuiz2Solved = React.useCallback(() => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("case-09-stage-2-completed", "true");
-    }
+    setIsStage3Done(true);
     advanceTo("QUIZ_2_SUCCESS");
   }, [advanceTo]);
 
@@ -424,22 +441,35 @@ export default function CaseFile09() {
   }, [advanceTo]);
 
   const handleFinalCompletion = async () => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("case-09-completed", "true");
-    }
+    setCompleted(true);
     await markCaseCompleted("09");
     window.location.href = "/hunt";
   };
 
   const handleRestartLog = () => {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("case-09-narrative-stage");
-      localStorage.removeItem("case-09-symbol-reconstructed");
-      localStorage.removeItem("case-09-quiz-1-completed");
-      localStorage.removeItem("case-09-stage-1-completed");
-      localStorage.removeItem("case-09-stage-2-completed");
-      localStorage.removeItem("case-09-completed");
-    }
+    setCompleted(false);
+    setSavedStage("BOOT");
+    setIsStage1Done(false);
+    setIsStage2Done(false);
+    setIsStage3Done(false);
+    
+    fetch("/api/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        caseId: "09",
+        key: "case9State",
+        value: {
+          narrativeStage: "BOOT",
+          symbolReconstructed: false,
+          quiz1Completed: false,
+          stage1Completed: false,
+          stage2Completed: false,
+          completed: false,
+        }
+      }),
+    }).catch((err) => console.error("Failed to reset Case 9 progress:", err));
+    
     advanceTo("BOOT");
   };
 

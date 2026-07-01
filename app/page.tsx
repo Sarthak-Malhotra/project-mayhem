@@ -18,6 +18,7 @@ export default function Home() {
         } catch (e) {
           console.error("Failed to clear session:", e);
         }
+        localStorage.clear();
         setAuthenticated(false);
         return;
       }
@@ -30,11 +31,13 @@ export default function Home() {
         } else {
           setAuthenticated(false);
           sessionStorage.removeItem("isLoggedIn");
+          localStorage.clear();
         }
       } catch (err) {
         console.error("Auth check failed:", err);
         setAuthenticated(false);
         sessionStorage.removeItem("isLoggedIn");
+        localStorage.clear();
       }
     }
     checkAuth();

@@ -25,6 +25,34 @@ export default function CaseFile06() {
     return () => clearInterval(timer);
   }, []);
 
+  // Load DB progress on mount
+  useEffect(() => {
+    async function loadProgress() {
+      try {
+        const res = await fetch("/api/progress?caseId=06");
+        const data = await res.json();
+        if (data.success && data.progress?.case6State) {
+          const state = data.progress.case6State;
+          if (state.stage !== undefined) setStage(state.stage);
+          if (Array.isArray(state.logs)) setLogs(state.logs);
+        }
+      } catch (err) {
+        console.error("Failed to load Case 6 progress:", err);
+      }
+    }
+    loadProgress();
+  }, []);
+
+  // Save progress whenever stage or logs change
+  useEffect(() => {
+    if (stage === 1 && logs.length === 0) return;
+    fetch("/api/progress", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ caseId: "06", key: "case6State", value: { stage, logs } }),
+    }).catch((err) => console.error("Failed to save Case 6 progress:", err));
+  }, [stage, logs]);
+
   const addLog = (id: string, text: string) => {
     if (!logs.find(log => log.id === id)) {
       setLogs((prev) => [...prev, { id, text }]);

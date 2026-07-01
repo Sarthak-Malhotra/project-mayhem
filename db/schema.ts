@@ -77,3 +77,12 @@ export const caseQuestions = pgTable('case_questions', {
     question: text('question').notNull(),
     answer: text('answer').notNull(),
 })
+
+export const userProgress = pgTable('user_progress', {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').references(() => users.id).notNull(),
+    caseId: text('case_id').notNull(),
+    progressKey: text('progress_key').notNull(),
+    progressValue: text('progress_value').notNull(),
+    updatedAt: timestamp('updated_at').defaultNow(),
+})

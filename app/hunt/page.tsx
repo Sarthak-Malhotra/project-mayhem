@@ -121,17 +121,7 @@ export default function HuntPage() {
       return;
     }
 
-    // Migration: If they completed Quiz 1 but not Quiz 2
-    if (
-      localStorage.getItem("case-09-completed") === "true" &&
-      localStorage.getItem("case-09-stage-2-completed") !== "true"
-    ) {
-      localStorage.setItem("case-09-stage-1-completed", "true");
-      localStorage.removeItem("case-09-completed");
-      document.cookie = "case-09-completed=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
-    }
-
-    // 1. Initial client-side check from local storage & cookies
+    // 1. Initial client-side check from cookies
     const list: Record<string, boolean> = {};
     const caseFilesNums = Array.from({ length: 9 }, (_, i) => String(i + 1).padStart(2, "0"));
     caseFilesNums.forEach((num) => {
@@ -151,12 +141,14 @@ export default function HuntPage() {
           return;
         }
 
+        // Fetch Case 9 state from progress DB
+        const c9Res = await fetch("/api/progress?caseId=09");
+        const c9Data = await c9Res.json();
+        const stage2Completed = c9Data.success && c9Data.progress?.case9State?.stage2Completed === true;
+
         if (data.success && data.completedCases) {
           if (data.stage1Completed) {
-            localStorage.setItem("case-09-stage-1-completed", "true");
-            if (localStorage.getItem("case-09-stage-2-completed") !== "true") {
-              localStorage.removeItem("case-09-completed");
-              document.cookie = "case-09-completed=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT";
+            if (!stage2Completed) {
               data.completedCases["09"] = false;
               list["09"] = false;
             }
@@ -166,20 +158,20 @@ export default function HuntPage() {
           let changed = false;
           
           for (const num of caseFilesNums) {
-            // A. If DB says it's completed but client doesn't know -> sync DB to client
-            if (apiCompleted[num] && !list[num]) {
-              list[num] = true;
-              localStorage.setItem(`case-${num}-completed`, "true");
-              document.cookie = `case-${num}-completed=true; path=/; max-age=31536000; SameSite=Lax`;
-              changed = true;
-            }
-            // B. If client says it's completed but DB doesn't know -> sync client to DB
-            else if (!apiCompleted[num] && list[num]) {
-              await fetch("/api/cases/progress", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ caseId: num }),
-              });
+            // If DB says it's completed, set cookie cache
+            if (apiCompleted[num]) {
+              if (!list[num]) {
+                list[num] = true;
+                document.cookie = `case-${num}-completed=true; path=/; max-age=31536000; SameSite=Lax`;
+                changed = true;
+              }
+            } else {
+              // If DB says not completed, clear client cache (reconciles leftover session data)
+              if (list[num]) {
+                list[num] = false;
+                document.cookie = `case-${num}-completed=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT`;
+                changed = true;
+              }
             }
           }
           
@@ -427,6 +419,31 @@ export default function HuntPage() {
               );
             })}
           </div>
+
+          {/* Detailed text list showing statuses of cases 1-8 */}
+          <div className="flex flex-col gap-1.5 border-t border-zinc-800/50 pt-2.5 font-mono text-[9px] w-full max-h-[160px] overflow-y-auto pr-1">
+            {Array.from({ length: 8 }, (_, i) => {
+              const num = String(i + 1).padStart(2, "0");
+              const isCompleted = completedList[num];
+              const caseTitle = SYMBOL_DETAILS[num]?.title || `Case File ${num}`;
+              return (
+                <div key={num} className="flex items-center justify-between text-zinc-400 w-full gap-4">
+                  <span className="truncate max-w-[170px] text-zinc-300 font-medium">
+                    CF-{num}: {caseTitle}
+                  </span>
+                  {isCompleted ? (
+                    <span className="text-emerald-400 font-bold uppercase tracking-wider flex-shrink-0">
+                      SECURED
+                    </span>
+                  ) : (
+                    <span className="text-zinc-600 uppercase tracking-wider flex-shrink-0">
+                      LOCKED
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         </section>
       )}
 
@@ -454,6 +471,34 @@ export default function HuntPage() {
                 
                 <div className="absolute bottom-3 right-4 font-mono text-[9px] tracking-[0.2em] text-emerald-500/60 bg-emerald-950/20 px-2 py-0.5 border border-emerald-500/20 rounded">
                   SECURED
+                </div>
+              </div>
+            );
+          }
+
+          // Case-File-09 requires cases 1 to 8 to be solved
+          const allOtherCasesSolved = Array.from({ length: 8 }, (_, i) => String(i + 1).padStart(2, "0"))
+            .every((n) => completedList[n] === true);
+
+          if (num === "09" && !allOtherCasesSolved) {
+            return (
+              <div
+                key={index}
+                className="flex flex-col items-center justify-center h-36 md:h-44 bg-zinc-950/40 border border-red-950/30 rounded-xl p-6 relative overflow-hidden select-none cursor-not-allowed group"
+              >
+                {/* Subtle red overlay */}
+                <div className="absolute inset-0 bg-gradient-to-b from-transparent to-red-500/[0.01]" />
+                
+                <span className="font-mono text-xs md:text-sm tracking-[0.25em] text-red-500/20 uppercase transition-colors duration-300">
+                  {fileName}
+                </span>
+
+                <div className="absolute top-4 left-4 flex items-center justify-center text-red-500/40">
+                  <Lock size={14} className="animate-pulse" />
+                </div>
+                
+                <div className="absolute bottom-3 right-4 font-mono text-[9px] tracking-[0.2em] text-red-500/60 bg-red-950/20 px-2 py-0.5 border border-red-500/20 rounded">
+                  LOCKED
                 </div>
               </div>
             );

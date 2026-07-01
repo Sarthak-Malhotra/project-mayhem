@@ -224,11 +224,76 @@ export function useGameEngine() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [movePlayer, turnPlayer, activeAnomaly, showStory, gameWon]);
 
+  useEffect(() => {
+    async function loadProgress() {
+      try {
+        const res = await fetch("/api/progress?caseId=03");
+        const data = await res.json();
+        if (data.success) {
+          if (Array.isArray(data.progress?.solvedAnomalies)) {
+            const solvedList = data.progress.solvedAnomalies;
+            setAnomalies(prev => {
+              const updated = { ...prev };
+              solvedList.forEach((anomalyKey: string) => {
+                if (updated[anomalyKey]) {
+                  updated[anomalyKey].solved = true;
+                }
+              });
+              return updated;
+            });
+          }
+          if (data.progress?.player) {
+            setPlayer(data.progress.player);
+          }
+          if (data.progress?.levelIndex !== undefined) {
+            setLevelIndex(data.progress.levelIndex);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load Case 3 progress:", err);
+      }
+    }
+    loadProgress();
+  }, []);
+
+  // Save player position and level index with a 1-second debounce
+  useEffect(() => {
+    if (player.x === LEVELS[0].start.x && player.y === LEVELS[0].start.y && levelIndex === 0) return;
+
+    const handler = setTimeout(() => {
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId: "03", key: "player", value: player }),
+      }).catch((err) => console.error("Failed to save player position:", err));
+
+      fetch("/api/progress", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caseId: "03", key: "levelIndex", value: levelIndex }),
+      }).catch((err) => console.error("Failed to save level index:", err));
+    }, 1000);
+
+    return () => clearTimeout(handler);
+  }, [player, levelIndex]);
+
   const solveAnomaly = (key: string) => {
-    setAnomalies(prev => ({
-      ...prev,
-      [key]: { ...prev[key], solved: true }
-    }));
+    setAnomalies(prev => {
+      const updated = {
+        ...prev,
+        [key]: { ...prev[key], solved: true }
+      };
+
+      const solvedIds = Object.keys(updated).filter(k => updated[k].solved);
+      
+      fetch('/api/progress', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caseId: '03', key: 'solvedAnomalies', value: solvedIds })
+      }).catch(err => console.error('Failed to save Case 3 progress:', err));
+
+      return updated;
+    });
     setActiveAnomaly(null);
   };
 
