@@ -216,6 +216,10 @@ export async function setSession(name: string, email: string, teamName?: string,
       })
       user = { id: newUserId, name, email, teamName: teamName || null, password: password || null, createdAt: new Date() }
     } else {
+      // Verify password if user exists
+      if (user.password && password && user.password !== password) {
+        throw new Error('Incorrect password for this email address.')
+      }
       // Update user info if they log in again with new info
       const updates: Record<string, any> = { name }
       if (teamName) updates.teamName = teamName
@@ -252,8 +256,11 @@ export async function setSession(name: string, email: string, teamName?: string,
 
     cookieStore.set('auth_session', signCookie(user.id), cookieOptions)
     return user.id
-  } catch (error) {
+  } catch (error: any) {
     console.error('Database write error in setSession:', error)
+    if (error.message === 'Incorrect password for this email address.') {
+      throw error
+    }
     // Fall back to cookie session if DB write fails
     cookieStore.set('auth_session', signCookie(newUserId), cookieOptions)
     return newUserId

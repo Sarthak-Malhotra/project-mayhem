@@ -20,8 +20,11 @@ export async function POST(request: NextRequest) {
 
     const userId = await setSession(name.trim(), email.trim().toLowerCase(), teamName.trim(), password.trim())
     return NextResponse.json({ success: true, userId })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Session API error:', error)
+    if (error.message === 'Incorrect password for this email address.') {
+      return NextResponse.json({ success: false, message: error.message }, { status: 401 })
+    }
     return NextResponse.json({ success: false, message: 'Server error setting session.' }, { status: 500 })
   }
 }
