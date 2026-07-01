@@ -48,12 +48,12 @@ export function useAnswerValidation(puzzleId: number) {
       setMessage("");
     } else if (result.partial) {
       setIsPartial(true);
-      setMessage(result.message || "Include the full answer — try again");
+      setMessage("INCOMPLETE MATCH - Include the full answer. Try again.");
     } else {
       setIsPartial(false);
       setIsShaking(true);
       setWrongAttempts((prev) => prev + 1);
-      setMessage("Incorrect answer. Try again.");
+      setMessage("NO HISTORICAL CORRELATION DETECTED - Archive remains unstable.");
       
       // Auto-reset shake state after animation duration (e.g. 500ms)
       setTimeout(() => {

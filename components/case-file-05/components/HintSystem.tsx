@@ -40,8 +40,8 @@ export function HintSystem({ puzzleId }: HintSystemProps) {
       {/* Accordion Content */}
       {isOpen && (
         <div className="p-4 border-t border-zinc-900/60 space-y-4">
-          <div className="text-[10px] text-zinc-500 uppercase tracking-widest leading-relaxed text-left">
-            // WARNING: EACH DECRYPTION HINT DEDUCTS 50 POINTS FROM TIMELINE STABILITY
+          <div className="text-[10px] text-zinc-500 uppercase tracking-widest leading-relaxed text-left border-l-2 border-amber-500/50 pl-2">
+            // Decrypting supporting evidence...
           </div>
 
           <div className="space-y-3">
@@ -86,7 +86,7 @@ export function HintSystem({ puzzleId }: HintSystemProps) {
                         onClick={unlockNextHint}
                         className="px-3 py-1.5 bg-amber-950/30 hover:bg-amber-900/40 border border-amber-900/60 hover:border-amber-800 text-[10px] font-bold text-amber-400 rounded cursor-pointer transition-all duration-300 active:scale-98 shrink-0"
                       >
-                        UNLOCK HINT (-50 PTS)
+                        UNLOCK HINT
                       </button>
                     </div>
                   ) : (

@@ -137,21 +137,13 @@ export function SolvedReveal({ puzzleId }: SolvedRevealProps) {
           <p className="pt-4">{config.lore}</p>
         </div>
 
-        {/* Score Display */}
-        <div className="w-full flex justify-between items-center px-4 py-2.5 bg-zinc-950 border border-zinc-900 rounded mb-6 text-xs text-zinc-400">
-          <span>STABILITY RATING:</span>
-          <span className="font-bold text-emerald-400">
-            +{score} / {maxScore} PTS
-          </span>
-        </div>
-
         {/* Action Button & Share Button Row */}
         <div className="w-full flex flex-col sm:flex-row gap-3 items-center justify-center">
           <button
             type="button"
             onClick={() => {
               const puzzleSlug = config.title;
-              const text = `I cracked Puzzle P${String(puzzleId).padStart(2, "0")} (${puzzleSlug}) in Cryptic Hunt Case 03 in ${duration} seconds! Can you beat my score?`;
+              const text = `I stabilized Anomaly P${String(puzzleId).padStart(2, "0")} (${puzzleSlug}) in Cryptic Hunt Case 05!`;
               navigator.clipboard.writeText(text).then(() => {
                 setCopied(true);
                 setTimeout(() => setCopied(false), 2000);
@@ -167,7 +159,7 @@ export function SolvedReveal({ puzzleId }: SolvedRevealProps) {
           {nextUnsolvedId ? (
             <button
               type="button"
-              onClick={() => setActive(nextUnsolvedId)}
+              onClick={() => setActive(null)}
               className="w-full sm:w-auto px-6 py-3 bg-emerald-500 hover:bg-emerald-400 text-black font-bold text-xs uppercase tracking-wider rounded cursor-pointer transition-all duration-300 flex items-center justify-center gap-2 shadow-[0_0_12px_rgba(16,185,129,0.3)] active:scale-98 min-h-[44px]"
             >
               <span>Proceed to Next Anomaly</span>

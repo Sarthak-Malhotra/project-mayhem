@@ -26,23 +26,13 @@ export function CaseFileLayout({ children }: CaseFileLayoutProps) {
       <header className="border-b border-zinc-800/80 bg-zinc-950/60 backdrop-blur-md px-6 py-4 md:py-6 relative z-30 flex flex-col sm:flex-row items-center justify-between gap-4">
         {/* Left Side: Title & Back Button */}
         <div className="flex items-center gap-4 w-full sm:w-auto">
-          {activePuzzle !== null ? (
-            <button
-              onClick={() => setActive(null)}
-              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-md text-xs font-mono text-zinc-400 hover:text-emerald-400 cursor-pointer transition-all duration-300 group"
-            >
-              <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-              <span>Back to Hub</span>
-            </button>
-          ) : (
-            <Link
-              href="/hunt"
-              className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-md text-xs font-mono text-zinc-400 hover:text-emerald-400 cursor-pointer transition-all duration-300 group"
-            >
-              <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
-              <span>Case Files</span>
-            </Link>
-          )}
+          <Link
+            href="/hunt"
+            className="flex items-center gap-2 px-3 py-1.5 bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 hover:border-zinc-700 rounded-md text-xs font-mono text-zinc-400 hover:text-emerald-400 cursor-pointer transition-all duration-300 group"
+          >
+            <ArrowLeft size={14} className="group-hover:-translate-x-0.5 transition-transform" />
+            <span>Case Files</span>
+          </Link>
 
           <div className="flex flex-col">
             <h1 className="font-serif text-lg tracking-[0.15em] text-zinc-100 font-bold uppercase drop-shadow-[0_0_8px_rgba(255,255,255,0.1)]">

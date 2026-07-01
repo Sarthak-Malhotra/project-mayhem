@@ -1,11 +1,13 @@
 "use client";
 
-import React, { ReactNode } from "react";
+import React, { ReactNode, useState, useEffect, useRef } from "react";
 import { useCaseStore } from "../CaseFileProvider";
 import { AnswerInput } from "./AnswerInput";
 import { HintSystem } from "./HintSystem";
 import { SolvedReveal } from "./SolvedReveal";
 import { Terminal } from "lucide-react";
+import { PuzzleLoadingOverlay } from "@/components/case-05/PuzzleLoadingOverlay";
+import { SuccessOverlay } from "@/components/case-05/SuccessOverlay";
 
 interface PuzzleShellProps {
   puzzleId: number;
@@ -18,8 +20,29 @@ export function PuzzleShell({ puzzleId, title, clue, children }: PuzzleShellProp
   const solved = useCaseStore((state) => state.solved);
   const isSolved = solved.includes(puzzleId);
 
+  const [isLoading, setIsLoading] = useState(true);
+  const [showSuccess, setShowSuccess] = useState(false);
+  const wasSolvedRef = useRef(isSolved);
+
+  useEffect(() => {
+    setIsLoading(true);
+    setShowSuccess(false);
+    wasSolvedRef.current = isSolved;
+  }, [puzzleId, isSolved]);
+
+  useEffect(() => {
+    if (isSolved && !wasSolvedRef.current) {
+      setShowSuccess(true);
+      wasSolvedRef.current = true;
+    }
+  }, [isSolved]);
+
   return (
-    <div className="w-full max-w-4xl mx-auto space-y-6 pb-12 font-mono text-zinc-100 select-text">
+    <div className="w-full max-w-4xl mx-auto space-y-6 pb-12 font-mono text-zinc-100 select-text relative min-h-[500px]">
+      {/* Narrative overlays */}
+      {isLoading && <PuzzleLoadingOverlay onComplete={() => setIsLoading(false)} />}
+      {showSuccess && <SuccessOverlay onComplete={() => setShowSuccess(false)} />}
+
       {/* Puzzle Meta Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-zinc-900 pb-4 text-left">
         <div>
@@ -32,9 +55,6 @@ export function PuzzleShell({ puzzleId, title, clue, children }: PuzzleShellProp
         </div>
         
         <div className="flex items-center gap-3 shrink-0">
-          <span className="text-xs text-zinc-500">
-            MAX RECOVERY: <span className="text-emerald-400">300 PTS</span>
-          </span>
           <span
             className={`px-2 py-0.5 rounded text-[9px] uppercase tracking-wider font-bold border ${
               isSolved
@@ -62,7 +82,13 @@ export function PuzzleShell({ puzzleId, title, clue, children }: PuzzleShellProp
 
       {/* Interactive component child container */}
       <div className="py-6 min-h-[200px] border border-zinc-900 bg-zinc-950/20 backdrop-blur-xs rounded-md shadow-inner flex flex-col justify-center">
-        {children}
+        {isLoading ? (
+          <div className="text-zinc-600 text-xs font-mono text-center py-12">
+            Loading security record feed...
+          </div>
+        ) : (
+          children
+        )}
       </div>
 
       {/* Submit / Solved Reveal area */}
