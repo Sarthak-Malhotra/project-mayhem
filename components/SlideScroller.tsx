@@ -177,7 +177,7 @@ export default function SlideScroller() {
         scrollTrigger: {
           trigger: containerRef.current,
           start: "top top",
-          end: () => `+=${storytellingSlides.length * 4.5 * window.innerHeight}`,
+          end: () => `+=${storytellingSlides.length * 9 * window.innerHeight}`,
           pin: true,
           scrub: 0.5,
           invalidateOnRefresh: true,
@@ -269,6 +269,7 @@ export default function SlideScroller() {
       const fallbackBtnFadeStart = fallbackLastSlideStart + 0.1 + (storytellingSlides[fallbackLastSlideIdx].lines.length - 1) * fallbackLastLineStep;
       
       tl.set(".start-investigation-btn-container", { display: "flex" }, fallbackBtnFadeStart);
+      tl.to(".scroll-indicator-container", { opacity: 0, duration: 0.3, ease: "power1.in" }, fallbackBtnFadeStart);
       tl.fromTo(".start-investigation-btn-container", 
         { opacity: 0 }, 
         { opacity: 1, duration: 0.3 }, 
@@ -285,6 +286,7 @@ export default function SlideScroller() {
 
     // Initialize initial slide visibility states
     gsap.set(".start-investigation-btn-container", { opacity: 0, display: "none" });
+    gsap.set(".scroll-indicator-container", { opacity: 1, y: 0 });
     gsap.set(".slide-text-container-0", { 
       opacity: 1,
       scale: 1,
@@ -318,7 +320,7 @@ export default function SlideScroller() {
       scrollTrigger: {
         trigger: containerRef.current,
         start: "top top",
-        end: () => `+=${storytellingSlides.length * 9 * window.innerHeight}`, // smooth vertical pinning duration
+        end: () => `+=${storytellingSlides.length * 18 * window.innerHeight}`, // smooth vertical pinning duration
         pin: true,
         scrub: 0.6,
         invalidateOnRefresh: true,
@@ -464,6 +466,7 @@ export default function SlideScroller() {
     const btnFadeStart = lastSlideStart + 1.2 + (storytellingSlides[lastSlideIdx].lines.length - 1) * lastLineStep;
     
     tl.set(".start-investigation-btn-container", { display: "flex" }, btnFadeStart);
+    tl.to(".scroll-indicator-container", { opacity: 0, y: 15, duration: 0.5, ease: "power2.in" }, btnFadeStart);
     tl.fromTo(".start-investigation-btn-container", 
       { opacity: 0, y: 15 }, 
       { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 
@@ -588,6 +591,35 @@ export default function SlideScroller() {
           ))}
         </div>
       </div>
+
+      {/* Scroll Down Indicator */}
+      <div className="scroll-indicator-container absolute bottom-8 left-0 right-0 z-40 flex flex-col items-center justify-center gap-2 text-zinc-500 font-mono text-[9px] tracking-[0.3em] uppercase pointer-events-none transition-colors duration-300">
+        <span>Scroll to decrypt index</span>
+        {/* Animated Mouse Icon */}
+        <div className="w-5 h-8 border border-zinc-500/50 rounded-full flex justify-center p-1 relative overflow-hidden">
+          <div className="scroll-wheel-dot w-1 h-2 bg-cyan-500 rounded-full" />
+        </div>
+      </div>
+
+      <style>{`
+        @keyframes scrollwheel {
+          0% {
+            transform: translateY(0);
+            opacity: 1;
+          }
+          50% {
+            transform: translateY(6px);
+            opacity: 0.2;
+          }
+          100% {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        .scroll-wheel-dot {
+          animation: scrollwheel 1.5s infinite ease-in-out;
+        }
+      `}</style>
 
       {/* Start Investigation Button Container */}
       <div className="start-investigation-btn-container absolute bottom-12 left-0 right-0 z-40 flex justify-center pointer-events-auto" style={{ display: "none", opacity: 0 }}>
