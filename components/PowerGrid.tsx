@@ -8,9 +8,10 @@ import { RefreshCw, ShieldAlert, Cpu, Power } from "lucide-react";
 
 interface PowerGridProps {
   onSolve: () => void;
+  hideModal?: boolean;
 }
 
-export function PowerGrid({ onSolve }: PowerGridProps) {
+export function PowerGrid({ onSolve, hideModal = false }: PowerGridProps) {
   const {
     grid,
     poweredTileIds,
@@ -21,6 +22,22 @@ export function PowerGrid({ onSolve }: PowerGridProps) {
     rotateTile,
     resetGrid,
   } = usePowerGrid();
+
+  const onSolveRef = React.useRef(onSolve);
+  React.useEffect(() => {
+    onSolveRef.current = onSolve;
+  }, [onSolve]);
+
+  React.useEffect(() => {
+    if (isSolved && hideModal) {
+      const timer = setTimeout(() => {
+        if (onSolveRef.current) {
+          onSolveRef.current();
+        }
+      }, 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [isSolved, hideModal]);
 
   return (
     <div className="w-full max-w-5xl px-4 py-6 flex flex-col items-center gap-8 z-10 select-none">
@@ -100,7 +117,7 @@ export function PowerGrid({ onSolve }: PowerGridProps) {
       </div>
 
       {/* Success Modal */}
-      <PowerSuccessModal isOpen={isSolved} onConfirm={onSolve} />
+      {!hideModal && <PowerSuccessModal isOpen={isSolved} onConfirm={onSolve} />}
     </div>
   );
 }

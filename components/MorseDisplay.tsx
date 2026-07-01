@@ -14,7 +14,7 @@ export function MorseDisplay({ transmission }: MorseDisplayProps) {
         RECOVERED TRANSMISSION // RAW_DATA
       </div>
 
-      <div className="flex flex-col items-center gap-6 select-text selection:bg-cyan-500/20 w-full text-center">
+      <div className="flex flex-col items-center gap-6 select-none w-full text-center">
         {words.map((word, wordIndex) => (
           <div
             key={wordIndex}
